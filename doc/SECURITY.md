@@ -64,7 +64,7 @@ Each defence is one line here; the linked section gives the detail.
 | Asset | Threat | Defence | Section |
 | --- | --- | --- | --- |
 | Activity of a user | Read or changed by another user | Every route that writes activity acts on the account of the session; the administration routes of an `ADMIN` change accounts, never their activity; an `ADMIN` reads other accounts through read-only routes. | [Authorization](#authorization) |
-| Accounts | Password guessing | PBKDF2-SHA256 hashes, a password policy, a delay per client address after each failure. | [Passwords](#passwords), [Login throttling](#login-throttling) |
+| Accounts | Password guessing | PBKDF2-SHA256 hashes, a password policy, a delay per client address and per login after each failure. | [Passwords](#passwords), [Login throttling](#login-throttling) |
 | Accounts | Enumeration | Same answer and similar timing whether the login exists or not. | [Enumeration](#enumeration) |
 | Sessions | Theft, fixation | Random identifiers stored hashed, new identifier at each login, strict cookie attributes, expiry. | [Sessions](#sessions) |
 | Forms | Cross-site request forgery (CSRF) | A token on every form and an origin check on every unsafe request. | [Forms and origins](#forms-and-origins) |
@@ -93,10 +93,12 @@ Each row is a known limit that the application does not remove. The column "Boun
 | Risk | Condition | Bound or reason | Mitigation |
 | --- | --- | --- | --- |
 | An administrator can take over an account. | An `ADMIN` resets the password of another account, then logs in with it. | Administrators are trusted. The reset is logged with its author, and the user can no longer log in with the old password. | Give `ADMIN` to as few people as possible; read the `password reset` events. |
-| No account is ever locked. | An attacker guesses the password of one login from many addresses. | The delay is per client address, not per account; only the [global budget](#global-budget) limits a spread guess. | Strong passwords (the policy); throttling. |
+| No account is ever locked. | An attacker guesses the password of one login from many addresses. | Each login also waits after its failures, whatever the address: one guess every `login.max_delay` per login at most once the delay is at its ceiling, about 288 a day by default ([Per login](#per-login)). Guesses spread over many logins are bounded by the delays per address and the [global budget](#global-budget). | Strong passwords (the policy); throttling. |
+| A user cannot log in while an attacker fails on the login. | An attacker who knows a login fails on it on purpose, once per `login.max_delay`, even from a single address. | The login waits up to `login.max_delay` (5 min by default) from every address, its owner's included, and the attacker can renew the wait as long as it goes on. The account is never locked: the wait ends `login.max_delay` after the attacker stops, and an open session stays open. | The `login failed` events show the address: block it before the server, or close its access. |
 | No second factor. | A password is known to an attacker. | Login takes a login and a password only. | Strong passwords; close the sessions of an exposed account. |
 | A legitimate user waits up to `login.max_delay` (5 min by default). | During an attack that exhausts the global budget, the user mistypes once. | The budget alone never refuses a login. | None in the application. |
 | New addresses are refused. | The throttle table holds `login.tracked_addresses` blocked addresses at once (4096 by default). | The attacker needs more addresses than that. | None in the application. |
+| Processor load from the check of an import. | A signed-in user posts the same import file again and again with « Vérifier » and « Valider les mois importés ». | Each check recomputes the counters month by month, a cost that grows with the square of the number of months: about half a second for eleven years, within the default `server.max_body_bytes`. Nothing is written. Accepted for this deployment. | Keep `server.max_body_bytes` at its default; a reverse proxy that limits the request rate. |
 | Processor load from parallel password checks. | An attacker holds many addresses. | One check at a time per address, no global limit; about half a second per check. Accepted for this deployment. | A reverse proxy that limits the request rate. |
 | Unbounded write load by a connected user. | A user saves again and again. | Writes are not rate-limited, and each one rewrites the whole database file, so the disk load grows with the database size. Accepted for a handful of accounts. | None in the application. |
 | Derived origins can be answered by another host. | `run --listen` without `--origin`. | `<host name>.local` is resolved by mDNS, and the bare host name may be resolved by LLMNR or a DNS search domain. | Give `--origin`. See [Host check](#host-check). |
@@ -107,13 +109,13 @@ Each row is a known limit that the application does not remove. The column "Boun
 | Group members can delete or replace the files. | The database directory is writable by its group. | A warning is logged. | Remove the group write right. See [Files](#files). |
 | Another user can block the program. | The database is in a sticky directory shared with other users. | That user creates the lock or session file first. | Use a directory of the service account. |
 | An administrator with a public password. | The example database is served on a network or used as a real database. | Its account `demo`, profile `ADMIN`, has the documented password `demonstration`. | Use it only on the loopback, in a copy; never as a real database. See [Example database](OPERATIONS.md#example-database). |
-| An administrator with a default password. | A container starts on a new database without `TIMESHEET_PASSWORD`. | Its administrator, `admin` unless `TIMESHEET_USERNAME` names another login, has the documented password `Tms@Admin%26`, provisional: the first login must change it, but whoever logs in first takes the account. | Give `TIMESHEET_PASSWORD` at the first start, or log in and change the password before the port is reachable from the network. See [Container](OPERATIONS.md#container). |
+| An administrator with a default password. | A container starts on a new database without `TIMESHEET_PASSWORD`, or with an empty one. | Its administrator, `admin` unless `TIMESHEET_USERNAME` names another login, has the documented password `Tms@Admin%26`, provisional: the first login must change it, but whoever logs in first takes the account. | Give `TIMESHEET_PASSWORD` at the first start, or log in and change the password before the port is reachable from the network. See [Container](OPERATIONS.md#container). |
 | A permanent password known to the operator. | `user add` or `user passwd` set the password. | The operator typed it. | Ask the user to change it from the profile page (« Mon profil »). |
 | The session file gives the CSRF tokens. | Someone reads the session file. | It does not give the means to use a session. | Protect it like the database. |
 | The database and the backups are not encrypted. | root, the service account or a holder of a backup reads the file. | Every comment and absence reason is readable in clear. | File modes, protected backups. See [Data protection](#data-protection). |
 | Login timing differs for some accounts. | A stored hash has a number of iterations other than `passwords.iterations`. | The decoy hash uses the configured number. | Change `passwords.iterations` rarely; a password change rewrites the hash with the configured number. |
 | The operator weakens a setting. | Whoever can write the server configuration lowers a duration, a delay or a limit. | Every setting is bounded by the program: at least 600 000 iterations, an initial login delay of at least 100 ms, sessions of at most 30 days, at most 16 384 sessions in all, HSTS of at least 24 h. The file is owned by root on a package; in the container image, it belongs to the service account, so that `config set` works through `docker exec`. | Protect the file like the binary; read `config show --config=<file>` after a change. |
-| A security fix of Go needs a rebuild. | A vulnerability is fixed in the Go standard library. | The binary is statically linked. | Rebuild and reinstall the binary or the package. |
+| A security fix of Go needs a rebuild. | A vulnerability is fixed in the Go standard library. | The binary is statically linked; the container image is built with the Go version named in its `Dockerfile`. | Rebuild and reinstall the binary or the package; raise the Go version of the `Dockerfile` when it leaves support, then rebuild the image. |
 
 Glossary of the terms of this table:
 
@@ -211,7 +213,7 @@ The usage text (`timesheet help`) lists these sources in another order; the orde
 
 ## LOGIN THROTTLING
 
-Throttling delays the next login attempt of a client address after a failure.
+Throttling delays the next login attempt of a client address, and of a login, after a failure.
 
 ### Parameters
 
@@ -223,9 +225,10 @@ The values are set in the [section login](SPECIFICATIONS.md#section-login) of th
 | Growth | Doubled at each further failure | fixed |
 | Longest delay | 5 min | `login.max_delay`, 1 s to 1 h |
 | Global budget | 100 new addresses a minute | `login.new_addresses_per_window`, 1 to 10 000, in a window of `login.budget_window`, 10 s to 1 h |
-| Size of the table | 4096 addresses | `login.tracked_addresses`, 16 to 1 000 000 |
+| Size of the table | 4096 addresses | `login.tracked_addresses`, 16 to 65 536 |
 | Failures forgotten after | 1 h without failure | `login.forget_after`, from the longest delay to 7 days |
-| Password checks at once per address | 1 | fixed; a second attempt during a check waits 1 s |
+| Password checks at once per address | 1 | fixed; a second attempt during a check is refused with status 429 and `Retry-After: 2` |
+| Delay per login | the same delays, counted per login whatever the address | the same settings; one password check at a time per login ([Per login](#per-login)) |
 
 ### Key
 
@@ -239,6 +242,17 @@ The delay applies to a key derived from the [client address](#client-address-and
 | None (a trusted proxy without a readable `X-Forwarded-For`) | One shared key, `::/128` |
 
 The events `login failed` and `login throttled` log this key in their `address` field, not the full client address.
+
+### Per login
+
+- Besides its address, an attempt is delayed by the login it names, whatever the address it comes from.
+- Only a login of valid form counts, whether the account exists or not, so that the delay reveals nothing about the accounts.
+- The delay of a login follows the rules of [Delay](#delay): the first delay, doubled at each further failure up to the longest delay, the failures forgotten after `login.forget_after`; one password check at a time per login.
+- The global budget does not apply to logins.
+- A success does not erase the earlier failures of the login, as for an address: an account that exists, whose owner logs in, keeps the same delay as an unknown login.
+- The logins are followed in a table of the same size as the addresses, `login.tracked_addresses`. When every entry of it is blocked or being checked, a new login is not followed, and only its address is delayed.
+- The password form of the profile page counts the login of the viewer.
+- A refusal gives the same status 429 and `Retry-After` as for an address; at the login form, the same `login throttled` event, which gives the key of the address, never the login.
 
 ### Delay
 
@@ -298,6 +312,7 @@ The client address is the address that the throttling, the access log and the ev
 
 - The default server configuration trusts the private ranges of RFC 1918: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`.
 - This has no effect while the server listens on the loopback only.
+- The container image listens on every interface of the container and empties the list, since Docker forwards the connections to a published port from a private address ([Container](OPERATIONS.md#container)).
 
 ### Advice
 
@@ -317,13 +332,13 @@ The client address is the address that the throttling, the access log and the ev
 | Identifier | 32 random bytes (256 bits) |
 | Storage | Only the SHA-256 of the identifier is kept |
 | Renewal | A new identifier at each login; the previous session of the browser is closed |
-| Cookie name | `ts_session` |
+| Cookie name | `ts_session`; `__Host-ts_session` when the origins are https |
 | Cookie attributes | `Path=/`, `HttpOnly`, `SameSite=Strict` |
 | `Secure` attribute | Set when the origins are https |
 | Cookie lifetime | No `Max-Age`: the cookie ends with the browser session |
 | CSRF token | One per session |
 
-`HttpOnly` hides the cookie from scripts. `SameSite=Strict` keeps the browser from sending it with a request started by another site. `Secure` keeps it off plain HTTP.
+The prefix `__Host-` makes the browser refuse the cookie unless it is `Secure`, has `Path=/` and no `Domain`: another site of the same domain, or a plain HTTP page of the same host, cannot set or shadow it. The login cookie `ts_login` takes the same prefix. `HttpOnly` hides the cookie from scripts. `SameSite=Strict` keeps the browser from sending it with a request started by another site. `Secure` keeps it off plain HTTP.
 
 ### Expiry
 
@@ -332,7 +347,7 @@ The client address is the address that the throttling, the access log and the ev
 | Sliding | 8 h | `sessions.idle_timeout`, 5 min to 7 days | A session unused for this long ends. |
 | Absolute | 24 h | `sessions.max_lifetime`, from the sliding expiry to 30 days | A session ends this long after the login, used or not. |
 
-Both expiries hold across restarts, and the configured values apply to the restored sessions too ([Section sessions](SPECIFICATIONS.md#section-sessions)).
+Both expiries hold across restarts: the server saves the sessions when it stops, so that only a crash loses up to `sessions.save_interval` of last activity, which can end a session that much earlier. The configured values apply to the restored sessions too ([Section sessions](SPECIFICATIONS.md#section-sessions)).
 
 ### Session file
 
@@ -359,6 +374,8 @@ The commands that act on the file are in [Command line](SPECIFICATIONS.md#comman
 - When an expired session is presented and dropped.
 - By `user profile`, `user passwd` and `user del`, which remove the sessions of their account before changing it. A change refused afterwards (for example the last administrator) has already closed them.
 - For the sliding expiry, at most once per `sessions.save_interval`, one minute by default.
+- When the server stops.
+- The file is written outside the lock of the sessions, so that a write does not hold up the other requests; a write never replaces the file with an older state of the sessions.
 
 ### At start
 
@@ -502,6 +519,7 @@ Writes are not rate-limited, and each rewrites the whole file (see [Accepted ris
 - Every write is checked by a round trip: the encoded data is decoded back strictly before it is written, and a failure refuses the write.
 - One exclusive lock is shared by the server and the commands that write.
 - Concurrent edits from several browsers are detected by optimistic revisions: a save made on a stale revision is refused.
+- The database refuses any write that rewrites a validated month, even when a controller or a command forgets to check it; only the deletion of the data erases the history ([Invariants](SPECIFICATIONS.md#invariants)).
 
 ## FILES
 

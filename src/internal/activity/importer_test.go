@@ -155,6 +155,42 @@ func TestImportedNullCounterKeepsTheSettings(t *testing.T) {
     }
 }
 
+func TestImportedDaysMoveTheTrackingStartBeforeTheAdjustments(t *testing.T) {
+    importer := NewImporter(authorConfiguration(), NewManualClock(time.Date(2026, time.April, 15, 10, 0, 0, 0, time.UTC)), NewIdentifierGenerator(rand.Reader), time.UTC)
+    calendar := authorCalendar(t, "2025-01")
+    calendar.Adjustments = append(calendar.Adjustments, Adjustment{ID: "a1", Date: day(t, "2025-02-10"), Counter: "CP", Amount: q(t, "1"), Reason: "Report"})
+    cases := map[string]struct {
+        problem string
+        warning string
+        start   string
+    }{
+        "2025-01-01": {"", "", "2025-01-01"},
+        "2025-01-02": {"", "tracking start moved from 2025-01-01 to 2025-01-02", "2025-01-02"},
+        "2025-02-03": {"", "tracking start moved from 2025-01-01 to 2025-02-03", "2025-02-03"},
+        "2025-03-02": {"tracking start: adjustments are dated before 2025-03-01", "", "2025-03-01"},
+    }
+    for first, expected := range cases {
+        imported, err := NewImportFile([]byte(`{"format": "timesheet-import", "version": 1, "settings": {"start": "2025-03-01"}, "days": {"` + first + `": {"am": "ABS", "pm": "ABS"}}}`))
+        if err != nil {
+            t.Fatal(err)
+        }
+        report, err := importer.Run(calendar, imported, NewImportOptions(), day(t, "2026-04-15"), month(t, "2027-04"))
+        if err != nil {
+            t.Fatal(err)
+        }
+        problem, warning := "", ""
+        if len(report.Problems) > 0 {
+            problem = report.Problems[0].Text()
+        }
+        if len(report.Warnings) > 0 {
+            warning = report.Warnings[0].Text()
+        }
+        if (len(report.Problems) > 1) || (problem != expected.problem) || (warning != expected.warning) || (report.Calendar.Settings.Start.String() != expected.start) {
+            t.Errorf("%s: problems %+v, warnings %+v, start %s", first, report.Problems, report.Warnings, report.Calendar.Settings.Start)
+        }
+    }
+}
+
 func TestImportedAdjustmentWithoutDateIsRefused(t *testing.T) {
     importer := NewImporter(authorConfiguration(), NewManualClock(time.Date(2026, time.April, 15, 10, 0, 0, 0, time.UTC)), NewIdentifierGenerator(rand.Reader), time.UTC)
     for _, adjustment := range []string{`{"counter": "CP", "amount": "1", "reason": "x"}`, `{"date": null, "counter": "CP", "amount": "1", "reason": "x"}`} {

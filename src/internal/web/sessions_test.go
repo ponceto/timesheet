@@ -77,12 +77,37 @@ func TestSessionsSurviveARestart(t *testing.T) {
     if len(archive.records) != 0 {
         t.Fatal("closed sessions must leave the file")
     }
+    again, _ := after.Open("oponcet", "")
+    clock.Advance(10 * time.Second)
+    after.Lookup(again)
+    after.Flush()
+    if (len(archive.records) != 1) || !archive.records[0].Seen.Equal(clock.Now()) {
+        t.Fatal("a flush must save the last activity")
+    }
+    stale := sessionSnapshot{records: []account.SessionRecord{}, generation: 1}
+    saves = archive.saves
+    after.write(stale)
+    if (archive.saves != saves) || (len(archive.records) != 1) {
+        t.Fatal("an older state of the sessions must never replace a newer one")
+    }
     clock.Advance(activity.NewDefaultSessionSettings().MaxLifetime.Std())
     archive.records = []account.SessionRecord{{Key: strings.Repeat("ab", 32), Login: "oponcet", CSRF: "t", Created: clock.Now().Add(-activity.NewDefaultSessionSettings().MaxLifetime.Std() - time.Hour), Seen: clock.Now()}}
     expired := NewSessions(clock, strings.NewReader(""), false, activity.NewDefaultSessionSettings())
     expired.Restore(archive, logger)
     if len(archive.records) != 0 {
         t.Fatal("expired sessions must be dropped at restart")
+    }
+}
+
+func TestSecureCookiesTakeTheHostPrefix(t *testing.T) {
+    clock := activity.NewManualClock(time.Date(2026, time.November, 11, 21, 0, 0, 0, time.UTC))
+    plain := NewSessions(clock, strings.NewReader(""), false, activity.NewDefaultSessionSettings())
+    secure := NewSessions(clock, strings.NewReader(""), true, activity.NewDefaultSessionSettings())
+    if cookie := plain.Cookie(SessionCookie, "x", 0); (cookie.Name != "ts_session") || cookie.Secure {
+        t.Fatalf("plain HTTP: %+v", cookie)
+    }
+    if cookie := secure.Cookie(LoginCookie, "x", 60); (cookie.Name != "__Host-ts_login") || !cookie.Secure || (cookie.Path != "/") || (cookie.Domain != "") {
+        t.Fatalf("https: %+v", cookie)
     }
 }
 

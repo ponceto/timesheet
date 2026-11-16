@@ -107,7 +107,7 @@ var/    lib/timesheet/ (database of the repository, given with --database, its l
 | Run | A Unix system (Linux, BSD, macOS) for the database file lock, and its time zone database (`tzdata`). |
 | Build | Go 1.24 or later, and `make`; `gcc` to run the tests. The tools of the Debian package are listed in [doc/BUILD.md](doc/BUILD.md#requirements). |
 
-The password prompt without echo needs Linux. Elsewhere, `user add` and `user passwd` read one visible line of the standard input: prefer the variable `TIMESHEET_PASSWORD` or a pipe.
+The password prompt without echo needs Linux. Elsewhere, `user add` and `user passwd` read one visible line of the standard input, with a warning when it is a terminal or another character device: prefer the variable `TIMESHEET_PASSWORD` or a pipe.
 
 ## GETTING STARTED
 

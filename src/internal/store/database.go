@@ -556,7 +556,17 @@ func (d *Database) SaveCalendar(login account.Login, revision int64, calendar ac
     d.mu.Lock()
     defer d.mu.Unlock()
     next := d.begin()
-    if err := d.place(next, login, revision, calendar); err != nil {
+    if err := d.place(next, login, revision, calendar, true); err != nil {
+        return err
+    }
+    return d.commit(next)
+}
+
+func (d *Database) EraseCalendar(login account.Login, revision int64, start activity.Date) error {
+    d.mu.Lock()
+    defer d.mu.Unlock()
+    next := d.begin()
+    if err := d.place(next, login, revision, activity.NewCalendar(start), false); err != nil {
         return err
     }
     return d.commit(next)
@@ -566,10 +576,10 @@ func (d *Database) CheckCalendar(login account.Login, revision int64, calendar a
     d.mu.Lock()
     defer d.mu.Unlock()
     next := d.begin()
-    return d.place(next, login, revision, calendar)
+    return d.place(next, login, revision, calendar, true)
 }
 
-func (d *Database) place(next DatabaseRecord, login account.Login, revision int64, calendar activity.Calendar) error {
+func (d *Database) place(next DatabaseRecord, login account.Login, revision int64, calendar activity.Calendar, keepHistory bool) error {
     index := d.find(next, login)
     if index < 0 {
         return account.ErrUnknownAccount
@@ -581,6 +591,9 @@ func (d *Database) place(next DatabaseRecord, login account.Login, revision int6
         return fmt.Errorf("%w: %v", ErrMalformedDatabase, err)
     }
     previous := next.Accounts[index]
+    if keepHistory && !calendar.KeepsHistoryOf(previous.Calendar) {
+        return activity.ErrHistoryRewritten
+    }
     calendar = calendar.Clone()
     calendar.Revision = revision + 1
     next.Accounts[index].Calendar = calendar
@@ -613,6 +626,12 @@ func (d *Database) SaveConfiguration(revision int64, config activity.Configurati
         next.Accounts[i].Calendar.Settings.Colors = colors
         if err := d.validateCalendar(config, next.Accounts[i].Calendar); err != nil {
             return fmt.Errorf("%w: %s.%v", activity.ErrConfigurationInUse, item.Login, err)
+        }
+        for _, code := range config.Activities {
+            previous, known := next.Configuration.Activity(code.ID)
+            if known && ((previous.Consumes != code.Consumes) || (previous.Feeds != code.Feeds)) && item.Calendar.UsesActivity(code.ID) {
+                return fmt.Errorf("%w: %s.%s: the effect of a used code changed", activity.ErrConfigurationInUse, item.Login, code.ID)
+            }
         }
     }
     config.Revision = revision + 1

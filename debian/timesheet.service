@@ -28,6 +28,7 @@ StateDirectoryMode=0700
 WorkingDirectory=/var/lib/timesheet
 ExecStart=/usr/bin/timesheet run --config=/etc/timesheet/timesheet.json
 Restart=on-failure
+RestartSec=2
 UMask=0077
 NoNewPrivileges=yes
 CapabilityBoundingSet=

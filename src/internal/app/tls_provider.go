@@ -21,6 +21,7 @@ import (
     "crypto/tls"
     "errors"
     "fmt"
+    "os"
 
     "timesheet/internal/activity"
 )
@@ -55,6 +56,11 @@ func (p *TLSProvider) Config() (*tls.Config, error) {
         return nil, fmt.Errorf("%w: %v", ErrInvalidCertificate, err)
     }
     return &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: p.minVersion, CipherSuites: p.cipherSuites(), NextProtos: []string{"http/1.1"}}, nil
+}
+
+func (p *TLSProvider) KeyExposed() bool {
+    info, err := os.Stat(p.keyPath)
+    return (err == nil) && ((info.Mode().Perm() & 0o037) != 0)
 }
 
 func (p *TLSProvider) cipherSuites() []uint16 {

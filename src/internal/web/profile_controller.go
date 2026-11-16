@@ -116,19 +116,19 @@ func (c *ProfileController) Submit(w http.ResponseWriter, r *http.Request) {
     current := r.PostFormValue("current")
     next := r.PostFormValue("password")
     key := c.address.Key(r)
-    allowed, wait := c.throttle.Begin(key)
+    allowed, wait := c.throttle.Begin(key, string(ws.Owner.Login))
     if !allowed {
         w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds()) + 1))
         c.errors.Status(w, r, http.StatusTooManyRequests)
         return
     }
     if !ws.Owner.Password.Verify(current) {
-        c.throttle.End(key, false)
+        c.throttle.End(key, string(ws.Owner.Login), false)
         c.logger.Warn("password change refused", "login", string(ws.Owner.Login))
         c.render(w, r, ws, http.StatusUnprocessableEntity, "Le mot de passe actuel est incorrect.")
         return
     }
-    c.throttle.End(key, true)
+    c.throttle.End(key, string(ws.Owner.Login), true)
     if next != r.PostFormValue("confirm") {
         c.render(w, r, ws, http.StatusUnprocessableEntity, "Les deux saisies du nouveau mot de passe diffèrent.")
         return

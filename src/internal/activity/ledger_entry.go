@@ -42,6 +42,12 @@ type LedgerEntry struct {
 // LedgerEntry implementation
 // ---------------------------------------------------------------------------
 
+func (e LedgerEntry) Same(other LedgerEntry) bool {
+    created := e.Created.Equal(other.Created)
+    e.Created, other.Created = time.Time{}, time.Time{}
+    return created && (e == other)
+}
+
 func (e LedgerEntry) MarshalJSON() ([]byte, error) {
     return json.Marshal(struct {
         ID      string       `json:"id"`

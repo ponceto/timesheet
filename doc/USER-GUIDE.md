@@ -85,67 +85,67 @@ The login page « Connexion »: login and password.
 
 ![Login](timesheet-02-login.png)
 
-### « Tableau de bord »
+### Dashboard
 
 The balance of each counter today, its validated balance and its forecast at the end of its period, and the total of the days entered.
 
 ![Tableau de bord](timesheet-03-dashboard.png)
 
-### « Activité »
+### Activity
 
 The grid of the month: a code for the morning and for the afternoon of each day, a comment, the validation of the month and its adjustments.
 
 ![Activité](timesheet-04-activity.png)
 
-### « Mois »
+### Month
 
 Consultation of a month: its totals, its calendar, its summary and the statement of each counter.
 
 ![Mois](timesheet-05-month.png)
 
-### « Année »
+### Year
 
 Consultation of a year: its totals, its calendar, the summary month by month with the row « Report N-1 », and one section per counter.
 
 ![Année](timesheet-06-year.png)
 
-### « Mon profil »
+### My profile
 
 Identity, name shown in the menu, password and open sessions.
 
 ![Mon profil](timesheet-07-my-profile.png)
 
-### « Réglages »
+### My settings
 
 Tracking start, calendar of public holidays, counters enabled, own accrual amounts, initial balances and colours of the codes.
 
 ![Réglages](timesheet-08-my-settings.png)
 
-### « Données »
+### My data
 
 Import of a file, export of your data and deletion of your data.
 
 ![Données](timesheet-09-my-data.png)
 
-### « Serveur »
+### Server
 
 For administrators: the software version and the settings of the server, read-only.
 
 ![Serveur](timesheet-10-admin-server.png)
 
-### « Comptes »
+### Accounts
 
 For administrators: the accounts, their state and sessions, and the creation of an account with a provisional password.
 
 ![Comptes](timesheet-11-admin-accounts.png)
 
-### « Configuration »
+### Configuration
 
 For administrators: the default calendar of public holidays, the activity codes and the counters.
 
 ![Configuration](timesheet-12-admin-settings.png)
 
-### « Vous êtes déconnecté »
+### Logout
 
 The page shown once the session is closed.
 

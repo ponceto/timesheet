@@ -43,6 +43,7 @@ type Repository interface {
     ChangePassword(login account.Login, current account.PasswordHash, hash account.PasswordHash) error
     TouchLogin(login account.Login, at time.Time) error
     SaveCalendar(login account.Login, revision int64, calendar activity.Calendar) error
+    EraseCalendar(login account.Login, revision int64, start activity.Date) error
     CheckCalendar(login account.Login, revision int64, calendar activity.Calendar) error
     SaveConfiguration(revision int64, config activity.Configuration) error
 }

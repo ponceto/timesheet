@@ -61,6 +61,7 @@ type accountRecord struct {
     Admin         bool
     Created       string
     CreatedDate   string
+    Identity      string
     LastLogin     string
     LastLoginDate string
     Path          string
@@ -85,7 +86,7 @@ func (c *AdminController) record(viewer *Viewer, item account.Account) accountRe
     year := strconv.Itoa(today.Year())
     location := c.today.Location()
     created := activity.NewDateOf(item.Created.In(location))
-    record := accountRecord{Login: string(item.Login), Name: item.Name, Disabled: !item.State.Enabled(), State: item.State.Label(), Profile: item.Profile.Label(), Admin: item.Profile == account.ProfileAdmin, Created: created.Numeric(), CreatedDate: created.String(), LastLogin: "jamais", Path: base, Balances: base + "/dashboard", Dashboard: base + "/month/" + today.Month().Path(), Year: base + "/year/" + year, Self: item.Login == viewer.Login, Sessions: c.sessions.Count(item.Login)}
+    record := accountRecord{Login: string(item.Login), Name: item.Name, Disabled: !item.State.Enabled(), State: item.State.Label(), Profile: item.Profile.Label(), Admin: item.Profile == account.ProfileAdmin, Created: created.Numeric(), CreatedDate: created.String(), Identity: c.identity(item), LastLogin: "jamais", Path: base, Balances: base + "/dashboard", Dashboard: base + "/month/" + today.Month().Path(), Year: base + "/year/" + year, Self: item.Login == viewer.Login, Sessions: c.sessions.Count(item.Login)}
     if !item.LastLogin.IsZero() {
         last := activity.NewDateOf(item.LastLogin.In(location))
         record.LastLogin, record.LastLoginDate = last.Numeric(), last.String()
@@ -170,6 +171,10 @@ func (c *AdminController) Update(w http.ResponseWriter, r *http.Request) {
         c.errors.NotFound(w, r)
         return
     }
+    if r.PostFormValue("created") != c.identity(item) {
+        c.show(w, r, http.StatusConflict, "Ce compte a été supprimé puis recréé entre-temps. Rechargez la page avant de recommencer.")
+        return
+    }
     switch r.PostFormValue("action") {
         case "profile":
             profile, err := account.NewProfile(r.PostFormValue("profile"))
@@ -195,8 +200,12 @@ func (c *AdminController) Update(w http.ResponseWriter, r *http.Request) {
                 return
             }
             hash, err := account.NewPasswordHash(password, c.iterations, c.random)
-            if (err != nil) || (c.repository.SetPassword(login, hash, true) != nil) {
+            if err != nil {
                 c.errors.Status(w, r, http.StatusInternalServerError)
+                return
+            }
+            if err := c.repository.SetPassword(login, hash, true); err != nil {
+                c.show(w, r, http.StatusConflict, c.message(err))
                 return
             }
             c.sessions.CloseAccount(login, "")
@@ -209,8 +218,7 @@ func (c *AdminController) Update(w http.ResponseWriter, r *http.Request) {
                     c.show(w, r, http.StatusUnprocessableEntity, "Le nom compte au plus 60 caractères, sur une ligne.")
                     return
                 }
-                c.logger.Error("cannot save the name", "error", err.Error())
-                c.errors.Status(w, r, http.StatusInternalServerError)
+                c.show(w, r, http.StatusConflict, c.message(err))
                 return
             }
             c.logger.Info("name changed", "login", string(login), "by", string(viewer.Login))
@@ -257,6 +265,10 @@ func (c *AdminController) Update(w http.ResponseWriter, r *http.Request) {
         default:
             c.errors.BadRequest(w, r)
     }
+}
+
+func (c *AdminController) identity(item account.Account) string {
+    return strconv.FormatInt(item.Created.Unix(), 10)
 }
 
 func (c *AdminController) target(r *http.Request, login account.Login) string {

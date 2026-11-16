@@ -42,6 +42,7 @@
                 <h2>Nom</h2>
                 <form method="post" action="{{.Path}}">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="created" value="{{.Identity}}">
                     <input type="hidden" name="action" value="name">
                     <fieldset>
                         <legend>Changer le nom</legend>
@@ -56,6 +57,7 @@
                 <h2>Profil</h2>
                 <form method="post" action="{{.Path}}">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="created" value="{{.Identity}}">
                     <input type="hidden" name="action" value="profile">
                     <fieldset>
                         <legend>Changer le profil</legend>
@@ -68,6 +70,7 @@
                 <h2>Accès</h2>
                 <form method="post" action="{{.Path}}">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="created" value="{{.Identity}}">
                     <input type="hidden" name="action" value="{{if .Disabled}}enable{{else}}disable{{end}}">
                     <fieldset>
                         <legend>{{if .Disabled}}Activer le compte{{else}}Désactiver le compte{{end}}</legend>
@@ -77,6 +80,7 @@
                 </form>
                 <form method="post" action="{{.Path}}">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="created" value="{{.Identity}}">
                     <input type="hidden" name="action" value="sessions">
                     <fieldset>
                         <legend>Fermer les sessions</legend>
@@ -89,6 +93,7 @@
                 <h2>Mot de passe</h2>
                 <form method="post" action="{{.Path}}">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="created" value="{{.Identity}}">
                     <input type="hidden" name="action" value="reset">
                     <fieldset>
                         <legend>Réinitialiser le mot de passe</legend>
@@ -102,6 +107,7 @@
                 <h2>Suppression</h2>
                 <form method="post" action="{{.Path}}">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="created" value="{{.Identity}}">
                     <input type="hidden" name="action" value="delete">
                     <fieldset>
                         <legend>Supprimer le compte et toutes ses données</legend>

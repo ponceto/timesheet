@@ -184,7 +184,7 @@ func (c *DataController) Reset(w http.ResponseWriter, r *http.Request) {
         c.page(w, r, ws, http.StatusUnprocessableEntity, PageModel{Alert: "Retapez exactement votre identifiant pour confirmer la suppression de vos données."})
         return
     }
-    if !c.store(w, r, ws, c.repository.SaveCalendar(ws.Owner.Login, revision, activity.NewCalendar(ws.Today.Month().First()))) {
+    if !c.store(w, r, ws, c.repository.EraseCalendar(ws.Owner.Login, revision, ws.Today.Month().First())) {
         return
     }
     c.logger.Info("data erased", "login", string(ws.Owner.Login))

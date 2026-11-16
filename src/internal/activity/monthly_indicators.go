@@ -17,6 +17,10 @@
 
 package activity
 
+import (
+    "maps"
+)
+
 // ---------------------------------------------------------------------------
 // MonthlyIndicators declaration
 // ---------------------------------------------------------------------------
@@ -29,6 +33,14 @@ type MonthlyIndicators struct {
     Upcoming    Quantity            `json:"upcoming"`
     ByCounter   map[string]Quantity `json:"by_counter"`
     ByCode      map[string]Quantity `json:"by_code"`
+}
+
+// ---------------------------------------------------------------------------
+// MonthlyIndicators implementation
+// ---------------------------------------------------------------------------
+
+func (i MonthlyIndicators) Same(other MonthlyIndicators) bool {
+    return (i.Holidays == other.Holidays) && (i.Total == other.Total) && (i.WorkingDays == other.WorkingDays) && (i.Missing == other.Missing) && (i.Upcoming == other.Upcoming) && maps.Equal(i.ByCounter, other.ByCounter) && maps.Equal(i.ByCode, other.ByCode)
 }
 
 // ---------------------------------------------------------------------------

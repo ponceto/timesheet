@@ -60,7 +60,7 @@ func (g *AuthGuard) Require(profile account.Profile, next http.HandlerFunc) http
 }
 
 func (g *AuthGuard) Viewer(r *http.Request) *Viewer {
-    cookie, err := r.Cookie(SessionCookie)
+    cookie, err := r.Cookie(g.sessions.CookieName(SessionCookie))
     if err != nil {
         return nil
     }

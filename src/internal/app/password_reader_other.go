@@ -21,6 +21,7 @@ package app
 
 import (
     "errors"
+    "fmt"
     "os"
 )
 
@@ -29,6 +30,9 @@ import (
 // ---------------------------------------------------------------------------
 
 func (p *PasswordReader) hideEcho(file *os.File) (func(), error) {
+    if info, err := file.Stat(); (err == nil) && ((info.Mode() & os.ModeCharDevice) != 0) {
+        fmt.Fprintln(p.stderr, "warning: the password is read with echo on this system; prefer " + PasswordVariable + " or a pipe")
+    }
     return nil, errors.New("app: hiding the terminal echo is only supported on Linux")
 }
 

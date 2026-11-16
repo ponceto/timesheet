@@ -525,6 +525,7 @@ How long the limit lasts:
 - They leave out a consuming code whose counter is disabled for the user or archived.
 - A feeding code of a disabled or archived counter stays offered: its half-days count in the indicators and the totals but credit nothing.
 - A value already stored on a half-day stays offered, even if its code is archived or its counter disabled.
+- A half-day that keeps its stored code is not checked again, by the grid or by an import: neither whether its code is offered, nor the rule of a consuming code on a weekend or a public holiday. A consuming code stored on a day that became a public holiday after a change of zone is therefore kept by a save or an import with `--replace`; it shows as a blocking anomaly of the month ([Anomalies](#anomalies)).
 
 ## COUNTERS
 
@@ -552,7 +553,7 @@ Every counter has a single balance.
 | Input | a decimal with at most six decimals, or a fraction (`7/12`); the forms of the pages accept a comma or a point (`2.08`, `-1,5`), files (database, configuration template, import) a point only |
 | Denominator of a fraction | a divisor of 63 000 000 (2^6 × 3^2 × 5^6 × 7), for instance `7/12`, `1/3`, `1/7` |
 | Magnitude | at most 1 000 000 |
-| Written form | a quantity read from a form, a file or the configuration template keeps the form it was written in: `8/12` stays `8/12`, `0.50` stays `0.50`; only the sign, leading zeros and a leading or trailing point are normalised (`+2` is `2`, `.5` is `0.5`, `0001` and `1.` are `1`) |
+| Written form | a quantity read from a form, a file or the configuration template keeps the form it was written in: `8/12` stays `8/12`, `0.50` stays `0.50`; only the sign, leading zeros and a leading or trailing point are normalised (`+2` is `2`, `.5` is `0.5`, `0001` and `1.` are `1`), and a fraction whose denominator is a power of ten is written as a decimal with as many decimals as that power (`5/10` is `0.5`, `50/100` is `0.50`, `3/1` is `3`) |
 | Computed form | the result of a computation (balance, total, sum of a day, rounding) is reduced, and written as a decimal when it is exact: `1/2` is `0.5`, `8/12 + 4/12` is `1`, a balance of `8/12` alone is `2/3` |
 | Comparison | equal values compare equal whatever their form: `8/12` equals `2/3` |
 | Storage | a string, in its written or computed form: `"2.08"`, `"8/12"`, `"0.5"` |
@@ -874,7 +875,7 @@ The validation form is not shown for a month before the tracking start, and the 
 
 ### Invariants
 
-These invariants are checked by the tests:
+These invariants are checked by the tests. The database also enforces invariant 2 at every write of an account's data, whatever the page or the command: the entries of the ledger are kept, in their order, and only appended to, with the entries of a month validated by that write or the reversals of the last validated month that it reopens; the days and the adjustments of a validated month stay the same, and so do its validation date, its frozen rules, its indicators and its history while it stays validated; a validated month stays validated, except the last one, which a reopening opens again; the tracking start does not move while a month is validated. A write that breaks it is refused as an internal error (500, or exit 1 on the command line), and nothing is written. The deletion of the data is the only exception.
 
 1. The balance equals the sum of the entries.
 2. A validated month is never rewritten; only the [deletion of the data](#deletion-of-the-data) erases the whole tracking of an account at once.
@@ -1431,7 +1432,7 @@ The section « Identité » lists:
 | --- | --- | --- |
 | unknown `action` | 400 | page « Requête invalide » |
 | invalid name | 422 | « Le nom compte au plus 60 caractères, sur une ligne. » |
-| too many failed checks from the same address | 429, with `Retry-After` | page « Trop de tentatives » |
+| too many failed checks from the same address, or on the same login | 429, with `Retry-After` | page « Trop de tentatives » |
 | wrong current password | 422 | « Le mot de passe actuel est incorrect. » |
 | the two new passwords differ | 422 | « Les deux saisies du nouveau mot de passe diffèrent. » |
 | new password equal to the current one or against the policy | 422 | « Le nouveau mot de passe doit différer de l'actuel et compter au moins 12 caractères dont 6 distincts, sans espace au début ni à la fin, et différer de l'identifiant. » |
@@ -1648,6 +1649,7 @@ The section « Informations » gives the name (or « non renseigné »), the pro
 | Action | Case | Status | Message |
 | --- | --- | --- | --- |
 | any | unknown login | 404 | page « Page introuvable » |
+| any | the field `created` is missing or differs from the account: the account was deleted then created again since the form was shown | 409 | « Ce compte a été supprimé puis recréé entre-temps. Rechargez la page avant de recommencer. » |
 | any | unknown `action` | 400 | page « Requête invalide » |
 | `name` | invalid name | 422 | « Le nom compte au plus 60 caractères, sur une ligne. » |
 | `profile` | invalid profile, or one's own profile | 422 | « Profil invalide, ou changement de son propre profil. » |
@@ -1658,7 +1660,7 @@ The section « Informations » gives the name (or « non renseigné »), the pro
 | `disable` | the last enabled `ADMIN` | 409 | « Le dernier administrateur actif ne peut être ni supprimé, ni rétrogradé, ni désactivé. » |
 | `delete` | wrong confirmation, or one's own account | 422 | « Retapez exactement l'identifiant pour confirmer ; un administrateur ne peut pas supprimer son propre compte. » |
 | `delete` | the last enabled `ADMIN` | 409 | « Le dernier administrateur actif ne peut être ni supprimé, ni rétrogradé, ni désactivé. » |
-| `profile`, `disable`, `enable`, `delete` | any other failure | 409 | « Opération impossible. » |
+| `name`, `profile`, `reset`, `disable`, `enable`, `delete` | any other failure | 409 | « Opération impossible. », or the page « Page introuvable » (404) when the account was deleted meanwhile |
 
 ### Read-only views of another account
 
@@ -1735,7 +1737,7 @@ The whole configuration is checked before it is written:
 | deletion of a counter still fed or consumed by a code | 422 | « Un code d'activité alimente ou décompte encore ce compteur. » |
 | the configuration changed since the form was shown | 409 | « La configuration a changé entre-temps. Vérifiez puis recommencez. » |
 | the configuration fails the [validation before writing](#validation-before-writing) | 422 | « Configuration refusée : \<détail> », the details being listed after this table |
-| the change would make stored data invalid | 409 | « Configuration refusée : elle rendrait invalides des données existantes. » |
+| the change would make stored data invalid, or changes the effect or the counter of a code that a day entered meanwhile uses (checked again when the configuration is written) | 409 | « Configuration refusée : elle rendrait invalides des données existantes. » |
 
 The details that follow « Configuration refusée : » are:
 
@@ -1797,7 +1799,7 @@ The label of the code (grid) or its identifier (year calendar) is always written
 | --- | --- | --- | --- |
 | `/` | GET | public | home page ([Public pages](#public-pages)) |
 | `/login` | GET | public | login form « Connexion »; a connected browser is redirected (303) to `/dashboard/` |
-| `/login` | POST | public | login: 303 to `/dashboard/` on success, 401 « Identifiant ou mot de passe incorrect. » on failure, 429 « Trop de tentatives » with `Retry-After` while the address is blocked |
+| `/login` | POST | public | login: 303 to `/dashboard/` on success, 401 « Identifiant ou mot de passe incorrect. » on failure, 429 « Trop de tentatives » with `Retry-After` while the address or the login is blocked |
 | `/logout` | GET | connected | confirmation page; a guest is redirected (303) to `/login` |
 | `/logout` | POST | connected | closes the session; page « Vous êtes déconnecté » |
 | `/dashboard/` | GET | connected | [dashboard](#dashboard): balances today |
@@ -1858,14 +1860,15 @@ The refusals below come in the order in which the server checks them: a request 
 | 9 | 303 to `/dashboard/profile` | account with a provisional password, outside the exempt routes ([Provisional password](#provisional-password)) | none |
 | 10 | 400 | form that cannot be read, a body beyond `server.max_body_bytes` (256 KiB by default) included | page « Requête invalide », « La requête ne peut pas être traitée. » |
 | 11 | 403 | POST whose CSRF token does not match its session; login posted without the login cookie of its form or with another token (the cookie lasts `login.form_lifetime`, one hour by default, from the last display of the form in that browser; the browser then drops it) | page « Accès refusé », « Le formulaire a expiré ou n'est pas valide. Rechargez la page et recommencez. » |
-| 12 | 429 | login, or check of the current password in the profile page, while the address is blocked by the throttle; with `Retry-After` | page « Trop de tentatives », « Patientez quelques instants avant de réessayer. » |
+| 12 | 429 | login, or check of the current password in the profile page, while the address or the login is blocked by the throttle; with `Retry-After` | page « Trop de tentatives », « Patientez quelques instants avant de réessayer. » |
 | 13 | 401 | wrong login or password, disabled account | the login form with « Identifiant ou mot de passe incorrect. » |
 | 14 | 404 | invalid year or month, unknown login under `/admin/accounts/` | page « Page introuvable » |
-| 15 | 400 | unknown `action`, unreadable revision | page « Requête invalide » |
-| 16 | 409, 413, 422 | refusals of a page | the page again, with an alert: [activity page](#refusals-of-the-activity-page), [settings page](#refusals-of-the-settings-page), [profile page](#refusals-of-the-profile-page), [data page](#refusals-of-the-data-page), [accounts page](#refusals-of-the-accounts-page), [account page](#refusals-of-the-account-page), [configuration page](#refusals-of-the-configuration-page) |
-| 17 | 500 | write error, the database file beyond `database.max_bytes` (64 MiB by default) included | page « Erreur interne » |
+| 15 | 409 | form of an account whose field `created` is missing or differs from the account | the account page or the accounts page again, with « Ce compte a été supprimé puis recréé entre-temps. Rechargez la page avant de recommencer. » |
+| 16 | 400 | unknown `action`, unreadable revision | page « Requête invalide » |
+| 17 | 409, 413, 422 | refusals of a page | the page again, with an alert: [activity page](#refusals-of-the-activity-page), [settings page](#refusals-of-the-settings-page), [profile page](#refusals-of-the-profile-page), [data page](#refusals-of-the-data-page), [accounts page](#refusals-of-the-accounts-page), [account page](#refusals-of-the-account-page), [configuration page](#refusals-of-the-configuration-page) |
+| 18 | 500 | write error, the database file beyond `database.max_bytes` (64 MiB by default) included | page « Erreur interne » |
 
-Every error page offers « Revenir à l'accueil ». The answers of rows 2 to 17 carry the security headers ([SECURITY.md](SECURITY.md#pages)) and a line in the access log ([Logs](#logs)).
+Every error page offers « Revenir à l'accueil ». The answers of rows 2 to 18 carry the security headers ([SECURITY.md](SECURITY.md#pages)) and a line in the access log ([Logs](#logs)).
 
 ### After a successful POST
 
@@ -1988,6 +1991,7 @@ Every form posts `application/x-www-form-urlencoded` data, except the import of 
 | « Nouveau compte » | same | `profile` | « Profil », list | `ADMIN` or `USER` |
 | « Nouveau compte » | same | `password` | « Mot de passe provisoire », password, 12 to 256 characters | the provisional password |
 | Every form of an account | `POST /admin/accounts/{login}` | `action` | hidden | `name`, `profile`, `disable`, `enable`, `sessions`, `reset` or `delete` |
+| Every form of an account | same | `created` | hidden | the creation time of the account, in seconds since 1970-01-01 UTC: a form shown before the account was deleted then created again under the same login, at another second, is refused |
 | Every form of a row of `/admin/accounts` | same | `return` | hidden | `list`: the answer comes back to `/admin/accounts` |
 | « Changer le nom » | same | `name` | « Nom et prénom », text, 60 characters | the name |
 | « Changer le profil » | same | `profile` | « Profil », list | `USER` or `ADMIN` |
@@ -2070,7 +2074,7 @@ timesheet help | version
 | 2 | usage error | an unknown command, option or key of `config show` or `config set`; `config`, `user` or `session` without subcommand; a wrong number of arguments, `config set` without a value for each key included; an option that does not apply to the command; a malformed value of `--from`, `--to`, `--log-level` or `--trusted-proxy`; an empty `--origin=` or `--trusted-proxy=`; `--from` after `--to`; `--tls-cert` without `--tls-key`, or the reverse; an invalid `--database` or `--config`; a command that opens the database while neither `--database` nor `database.path` gives it; `config show` or `config set` without `--config`; `init` without `--template` |
 | 128 + signal | password prompt interrupted | 129 for SIGHUP, 130 for SIGINT, 131 for SIGQUIT, 143 for SIGTERM; the terminal echo is restored |
 
-An error is printed on the standard error as `timesheet: <message>`. An error found while reading the options and the arguments is followed by `Try 'timesheet help' for more information.`, except the checks of the months of `import`, which print only their line: `timesheet: invalid --from`, `timesheet: invalid --to` or `timesheet: --from after --to`.
+An error is printed on the standard error as `timesheet: <message>`. An error found while reading the options and the arguments is followed by `Try 'timesheet help' for more information.`, except the checks of the months of `import`, which print only their line: `timesheet: invalid --from`, `timesheet: invalid --to` or `timesheet: --from after --to`, and a command that opens the database while neither `--database` nor `database.path` gives it, which prints only `timesheet: <command>: no database: give --database or set database.path in --config`.
 
 ### Help and version
 
@@ -2087,7 +2091,7 @@ The server also starts before step 2, without any account: it then warns, and st
 
 The procedure, with the paths of an installed package, is in [OPERATIONS.md, Install](OPERATIONS.md#install) and [README.md, First start](../README.md#first-start).
 
-The container image does steps 1 and 2 at its first start, before `run`, when the database named by its server configuration does not exist yet: `init`, then `user add <login> --profile=ADMIN --provisional`, with the login of `TIMESHEET_USERNAME`, or else `admin`, and the password of `TIMESHEET_PASSWORD`, or else the default password `Tms@Admin%26`. The account must change its password at its first login ([Provisional password](#provisional-password)). When the database exists, nothing is created; when `init` or `user add` fails, the container stops with exit 1. The procedure is in [OPERATIONS.md, Container](OPERATIONS.md#container).
+The container image does steps 1 and 2 at its first start, before `run`, when the database named by its server configuration does not exist yet: `init`, then `user add <login> --profile=ADMIN --provisional`, with the login of `TIMESHEET_USERNAME`, or else `admin`, and the password of `TIMESHEET_PASSWORD`, or else, when the variable is missing or empty, the default password `Tms@Admin%26`. The account must change its password at its first login ([Provisional password](#provisional-password)). When the database exists, nothing is created; when `init` or `user add` fails, the container stops with exit 1. The procedure is in [OPERATIONS.md, Container](OPERATIONS.md#container).
 
 ### Passwords
 
@@ -2095,7 +2099,7 @@ The container image does steps 1 and 2 at its first start, before `run`, when th
 
 1. the environment variable `TIMESHEET_PASSWORD`, refused when it is set but empty;
 2. otherwise, on Linux, twice on the terminal without echo, after the prompts `Password: ` and `Confirmation: `; the two must match, and an interruption restores the echo;
-3. otherwise one line of the standard input (4096 bytes at most).
+3. otherwise one line of the standard input (4096 bytes at most); when that input is a terminal or another character device, such as `/dev/null`, on another system than Linux, the command first prints `warning: the password is read with echo on this system; prefer TIMESHEET_PASSWORD or a pipe`.
 
 The password policy then applies ([SECURITY.md](SECURITY.md#passwords)). The help text lists these sources in another order; the order of this list is the one applied.
 
@@ -2131,7 +2135,7 @@ The password policy then applies ([SECURITY.md](SECURITY.md#passwords)). The hel
 - Reads the server configuration first, then takes the lock and loads the database.
 - Starts even while no enabled `ADMIN` exists, and then logs the warning `no administrator account` with the hint `stop the server, run 'timesheet user add <login> --profile=ADMIN --database=<file>', then start it again`, followed by `--config=<file>` when it was given; these arguments are absolute and quoted for the shell as in the hint of `init` ([Start condition of the server](#start-condition-of-the-server)).
 - Restores the sessions of the [session file](#session-file).
-- Stops on SIGINT or SIGTERM, letting the requests in progress end for up to `server.shutdown_timeout` (10 seconds by default).
+- Stops on SIGINT or SIGTERM, letting the requests in progress end for up to `server.shutdown_timeout` (10 seconds by default), then saves the sessions.
 - Takes its timeouts and request sizes from the [section server](#section-server) of the server configuration, and the durations of its sessions and of its login throttle from the sections [sessions](#section-sessions) and [login](#section-login).
 
 #### Address and origins
@@ -2176,7 +2180,7 @@ The password policy then applies ([SECURITY.md](SECURITY.md#passwords)). The hel
 
 - `config show` prints the server configuration read from the file, as JSON, in the [layout](#layout) of the file, every key included. A missing file is an error. It never shows the options of a running server.
 - `config show KEY` prints only the value of one key, raw, on one line: a string without quotes, a duration in its shortest form, a number, a list as values separated by commas, `null` for no value. A script reads a setting this way, for instance `config show database.path`.
-- `config set KEY VALUE [KEY VALUE...]` reads each value according to the type of its key, applies all of them, validates the whole configuration, then rewrites the file atomically in its layout, mode 0644, creating its directory (mode 0755) when missing. Nothing is written when one value is refused. A missing file starts from the defaults, without database.
+- `config set KEY VALUE [KEY VALUE...]` reads each value according to the type of its key, applies all of them, validates the whole configuration, then rewrites the file atomically in its layout, creating its directory (mode 0755) when missing. A file that exists keeps its mode, its owner and its group: a user who cannot give them back to the new file gets an error, and nothing is written. A symbolic link is followed: the file it names is rewritten, the link stays; a link to a missing file is refused with `<file> is a link to a missing file`. A new file gets mode 0644. Nothing is written when one value is refused. A missing file starts from the defaults, without database.
 - Linked keys are set in the same command: `server.tls_cert` with `server.tls_key`, `sessions.idle_timeout` with `sessions.max_lifetime`, `login.initial_delay` and `login.forget_after` with `login.max_delay`, `limits.accounts` with `sessions.per_account`. Set one after the other, the first may be refused.
 - `config set` prints `<keys> updated in <file>; restart the server to apply it.`, the keys separated by commas.
 - Neither reads the database nor needs the server stopped.
@@ -2313,7 +2317,7 @@ Settings follow the rules of the [settings page](#settings-page):
 
 - Each imported day is checked like an entry of the grid, its comment trimmed the same way.
 - Its codes must be offered: an archived code, or a consuming code whose counter is disabled, is refused unless it is already stored on that half-day.
-- A consuming code is refused on a weekend or a public holiday.
+- A consuming code is refused on a weekend or a public holiday, unless it is already stored on that half-day ([Codes offered in a grid](#codes-offered-in-a-grid)).
 - The comment follows the [free-text rule](#free-text-rule), 500 characters at most.
 - The month must be within the planning horizon and not validated.
 - An existing entry is replaced only with `--replace`, even an identical one.
@@ -2334,6 +2338,8 @@ Settings follow the rules of the [settings page](#settings-page):
 
 - When the first imported day precedes the tracking start of an account without validated month, the tracking start moves back to that day, with a warning.
 - This also overrides a later `start` given in the same file.
+- The warning gives the stored tracking start, then the new one.
+- A tracking start changed by the file, its `start` and its days together, is refused when a stored adjustment is dated before it.
 - When the account has a validated month, such a file is refused.
 
 ### Errors
@@ -2370,7 +2376,7 @@ The command prints, in this order:
 1. the warnings, prefixed with `warning: ` (`tracking start moved from <date> to <date>`, `adjustment of <date> already present, ignored`);
 2. `Settings read: tracking start <date>, <n> counter(s).` when the file has `settings`;
 3. `<n> day(s) read, from <month> to <month>.` when the file has days;
-4. month by month, `missing entries in <month>: <dates>`: the days before today with a half-day or both left without entry, weekends and holidays included;
+4. month by month, within the imported months, `missing entries in <month>: <dates>`: the days before today with a half-day or both left without entry, weekends and holidays included;
 5. `<n> adjustment(s) read.` when the file has adjustments;
 6. with `--validate`, `<month> validated.` per month, or `validation stopped at <month>: <reason>`;
 7. `Dry run: nothing was written.` with `--dry-run`, otherwise `Import saved.`.
@@ -2687,12 +2693,12 @@ A file edited by hand may use any layout: the next `config set` rewrites it in t
 | Key | Format and bounds | Meaning | Default |
 | --- | --- | --- | --- |
 | `form_lifetime` | a duration from 1 min to 24 h | the life of the login cookie `ts_login`, counted from the last display of the form in the browser | `1h` |
-| `initial_delay` | a duration from 100 ms to 10 s, at most `max_delay` | the wait after a first failure; it doubles at each further failure | `1s` |
-| `max_delay` | a duration from 1 s to 1 h | the longest wait, and the wait of an address beyond the budget | `5m` |
+| `initial_delay` | a duration from 100 ms to 10 s, at most `max_delay` | the wait after a first failure, of the address and of the login; it doubles at each further failure | `1s` |
+| `max_delay` | a duration from 1 s to 1 h | the longest wait of an address or a login, and the wait of an address beyond the budget | `5m` |
 | `budget_window` | a duration from 10 s to 1 h | the window of the global budget | `1m` |
 | `new_addresses_per_window` | 1 to 10 000 | the new addresses that may fail in a window before the next ones wait `max_delay` | `100` |
-| `tracked_addresses` | 16 to 1 000 000 | the addresses followed at once | `4096` |
-| `forget_after` | a duration from `max_delay` to 7 days | an address without failure for this long starts again from `initial_delay` | `1h` |
+| `tracked_addresses` | 16 to 65 536 | the addresses followed at once, and the logins followed at once | `4096` |
+| `forget_after` | a duration from `max_delay` to 7 days | an address or a login without failure for this long starts again from `initial_delay` | `1h` |
 
 The throttle itself is described in [SECURITY.md](SECURITY.md#login-throttling).
 
@@ -2738,7 +2744,7 @@ These limits apply only to a write that grows the database: a lowered limit neve
 ### Editing
 
 - The file holds no secret and is never written by the server.
-- It can be read by anyone (mode 0644) and edited by hand.
+- It is created readable by anyone (mode 0644), keeps the mode, the owner and the group given to it, and can be edited by hand.
 - `config set` rewrites it after validating the new values ([`timesheet config show` and `timesheet config set`](#timesheet-config-show-and-timesheet-config-set)).
 - The server page shows the settings read at the start of the server, read-only ([Server settings shown](#server-settings-shown)).
 
@@ -2747,6 +2753,7 @@ These limits apply only to a write that grows the database: a lowered limit neve
 - The default trusted proxies are the private ranges of RFC 1918.
 - A reverse proxy on a private network is therefore believed about its client without further setting.
 - A server that listens on the loopback only receives no request from these ranges.
+- The server configuration of the container image trusts no proxy: it listens on every interface of the container, and Docker forwards the connections to a published port from a private address.
 - Narrow the list to the address of the proxy.
 
 ## CONFIGURATION TEMPLATE
@@ -2858,6 +2865,14 @@ The paths lost their defaults, and the files written next to the database lost t
 - The former session file `.<name>.sessions` is no longer read: its users log in again. Stop the server, then delete it, with the former lock `.<name>.lock`; the session file holds the CSRF tokens of its sessions.
 - The former lock `.<name>.lock` and the new `<name>.lock` do not exclude each other: a former server still running does not stop a command of the new version, and its next write would erase what that command wrote. Stop the server before upgrading or rebuilding, and start it again only with the new version.
 
+### Login throttle and cookies
+
+The table of the login throttle got a lower maximum, the cookies a prefix under https, and the container image a server configuration that trusts no proxy, without raising the schema `version`, which is still 1.
+
+- A server configuration with `login.tracked_addresses` above 65 536 is refused with `login.tracked_addresses: an integer from 16 to 65536 is expected` (exit 1): edit the key in the file by hand, 65536 at most; `config show` and `config set` refuse the file until then.
+- The volume of the server configuration of a container created by an earlier image keeps that configuration, which trusts the RFC 1918 ranges: run `config set server.trusted_proxies ''` in the container, then restart it ([OPERATIONS.md, Container](OPERATIONS.md#back-up-and-upgrade-the-container)).
+- With https origins, the cookies are named `__Host-ts_session` and `__Host-ts_login`: the sessions opened before the upgrade are no longer recognised, and their users log in again. The former cookies expire with the browser session.
+
 ### Rule for future changes
 
 A change of the layout of the database raises its `version` and makes the program read or convert the former version, or adds a note to this section with its symptom and its procedure. The same applies to the server configuration and to the import format.
@@ -2902,6 +2917,7 @@ time=2026-11-13T16:40:12.345+01:00 level=INFO msg=request client=203.0.113.9 pee
 | `listening` | INFO | `address`, `origins`, `database` | the server is ready; `database` is the absolute path of the database file |
 | `no administrator account` | WARN | `hint` | the database has no enabled `ADMIN` at start |
 | `serving plain HTTP: …` | WARN | | the origins are `http` |
+| `the TLS key is readable by other users: give it mode 0600 or 0640` | WARN | `path` | the key of the TLS pair gives a right to others, or a right to its group beyond reading |
 | `stopped` | INFO | | the server stopped |
 | `server stopped` | ERROR | `error` | the server failed while serving |
 | `cannot load <path>`, `cannot lock <path>`, `cannot listen on <address>`, `invalid origins`, `invalid trusted proxies`, `TLS needs https origins`, `TLS setup failed`, `cannot prepare <path>`, `cannot build the site` | ERROR | `error` | `run` cannot start; it exits with 1 |
@@ -2964,10 +2980,10 @@ The security model, its reasons and its accepted risks are owned by [SECURITY.md
 | Topic | Requirement | Details |
 | --- | --- | --- |
 | Sessions | kept in memory and saved hashed in the [session file](#session-file), so that they survive a restart; sliding expiry, absolute expiry and number per account set in the [section sessions](#section-sessions), 8 h, 24 h and 64 by default | [Sessions](SECURITY.md#sessions) |
-| Cookies | the session cookie `ts_session` and the login form cookie `ts_login`, both `HttpOnly` and `SameSite=Strict`; `Secure`, and HSTS of `server.hsts_max_age`, with https origins | [Sessions](SECURITY.md#sessions) |
+| Cookies | the session cookie `ts_session` and the login form cookie `ts_login`, both `HttpOnly` and `SameSite=Strict`; with https origins, `Secure`, the prefix `__Host-` (`__Host-ts_session`, `__Host-ts_login`) and HSTS of `server.hsts_max_age` | [Sessions](SECURITY.md#sessions) |
 | Forms | a CSRF token on every form, and an origin check on every unsafe request | [Forms and origins](SECURITY.md#forms-and-origins) |
 | Passwords | PBKDF2-SHA256 with `passwords.iterations` iterations, 600 000 at least and by default; at least 12 characters, 6 distinct, no surrounding space, no control, format or line separator character, 256 bytes at most, different from the login whatever the case and, from the profile page, from the current password | [Passwords](SECURITY.md#passwords) |
-| Login | throttled per address, with the delays of the [section login](#section-login) | [Login throttling](SECURITY.md#login-throttling) |
+| Login | throttled per address and per login, with the delays of the [section login](#section-login) | [Login throttling](SECURITY.md#login-throttling) |
 | Pages | strict CSP with Trusted Types | [Pages](SECURITY.md#pages) |
 | Logs | no secret in the logs ([Never logged](#never-logged)) | [Logs](SECURITY.md#logs) |
 
@@ -2989,7 +3005,7 @@ The column « Setting » names the key of the [server configuration](#server-con
 | Sessions per account | 64 | `sessions.per_account` | the oldest session is closed | [SECURITY.md](SECURITY.md#sessions) |
 | Session expiry | 8 h without activity, 24 h at most | `sessions.idle_timeout`, `sessions.max_lifetime` | the session is closed | [SECURITY.md](SECURITY.md#sessions) |
 | Login form | 1 hour from its last display in the browser | `login.form_lifetime` | 403 | [Refusals](#refusals) |
-| Login throttle | delay of 1 s doubling up to 5 min per address; 4096 addresses; 100 new addresses a minute; an address forgotten after 1 h without failure | `login.initial_delay`, `login.max_delay`, `login.tracked_addresses`, `login.new_addresses_per_window`, `login.budget_window`, `login.forget_after` | 429 | [SECURITY.md](SECURITY.md#login-throttling) |
+| Login throttle | delay of 1 s doubling up to 5 min per address and per login; 4096 addresses and 4096 logins; 100 new addresses a minute; an address or a login forgotten after 1 h without failure | `login.initial_delay`, `login.max_delay`, `login.tracked_addresses`, `login.new_addresses_per_window`, `login.budget_window`, `login.forget_after` | 429 | [SECURITY.md](SECURITY.md#login-throttling) |
 | Import file | 8 MiB | fixed | exit 1 | [Import](#import) |
 | Configuration template | 1 MiB | fixed | exit 1 | [Configuration template](#configuration-template) |
 | Server configuration file | 1 MiB | fixed | exit 1 | [Server configuration](#server-configuration) |

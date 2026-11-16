@@ -229,10 +229,14 @@ func (a *Application) serve(ctx context.Context, settings *Settings, server acti
         return a.fail(logger, "TLS needs https origins", errors.New("give --origin=https://... or run config set server.origins with https origins, or remove the pair with config set server.tls_cert null server.tls_key null"))
     }
     if secure {
-        tlsConfig, err := NewTLSProvider(certificate, key, config.TLSMinVersion).Config()
+        provider := NewTLSProvider(certificate, key, config.TLSMinVersion)
+        tlsConfig, err := provider.Config()
         if err != nil {
             listener.Close()
             return a.fail(logger, "TLS setup failed", err)
+        }
+        if provider.KeyExposed() {
+            logger.Warn("the TLS key is readable by other users: give it mode 0600 or 0640", "path", key)
         }
         listener = tls.NewListener(listener, tlsConfig)
     } else if !origins.Secure() {
@@ -278,6 +282,7 @@ func (a *Application) serve(ctx context.Context, settings *Settings, server acti
     if err := httpServer.Shutdown(shutdown); err != nil {
         httpServer.Close()
     }
+    site.Flush()
     logger.Info("stopped")
     return code
 }

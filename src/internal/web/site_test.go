@@ -109,8 +109,9 @@ func TestProfilesGuardTheAdministration(t *testing.T) {
     if status, _, _ := admin.post("/admin/accounts/demo/month/2026/10", url.Values{"csrf": {admin.token(list)}}); status != http.StatusMethodNotAllowed {
         t.Fatalf("write on a read-only view: %d", status)
     }
+    rootCreated := admin.field(admin.page("/admin/accounts/root"), "created")
     for _, action := range []string{"delete", "reset", "profile"} {
-        if status, _, _ := admin.post("/admin/accounts/root", url.Values{"csrf": {admin.token(list)}, "action": {action}, "confirm": {"root"}, "profile": {"USER"}, "password": {"another strong one"}}); status != http.StatusUnprocessableEntity {
+        if status, _, _ := admin.post("/admin/accounts/root", url.Values{"csrf": {admin.token(list)}, "created": {rootCreated}, "action": {action}, "confirm": {"root"}, "profile": {"USER"}, "password": {"another strong one"}}); status != http.StatusUnprocessableEntity {
             t.Fatalf("self %s: %d", action, status)
         }
     }
@@ -257,7 +258,7 @@ func TestAdministratorCreatesAnAccount(t *testing.T) {
         t.Fatalf("dashboard after the change: %d", status)
     }
     _, _, page = admin.get("/admin/accounts")
-    if status, _, _ := admin.post("/admin/accounts/marie", url.Values{"csrf": {admin.token(page)}, "action": {"profile"}, "profile": {"ADMIN"}}); status != http.StatusSeeOther {
+    if status, _, _ := admin.post("/admin/accounts/marie", url.Values{"csrf": {admin.token(page)}, "created": {admin.field(admin.page("/admin/accounts/marie"), "created")}, "action": {"profile"}, "profile": {"ADMIN"}}); status != http.StatusSeeOther {
         t.Fatalf("promote: %d", status)
     }
     if status, location, _ := marie.get("/dashboard/"); (status != http.StatusSeeOther) || (location != "/login") {
@@ -317,18 +318,24 @@ func TestAdministratorDisablesAndDeletesAnAccount(t *testing.T) {
     if !strings.Contains(list, `aria-label="Désactiver root" title="Désactiver" disabled>`) || !strings.Contains(list, `<button type="button" class="icon-button" aria-label="Supprimer root" title="Supprimer" disabled>`) || strings.Contains(list, `aria-label="Fermer les sessions de root" title="Fermer les sessions" disabled>`) {
         t.Error("the own account of the administrator must show its actions, disabled except the closing of its sessions")
     }
+    demo := admin.field(admin.page("/admin/accounts/demo"), "created")
+    root := admin.field(admin.page("/admin/accounts/root"), "created")
     form := url.Values{"csrf": {admin.token(list)}, "action": {"name"}, "name": {"  Jean   Démo "}}
+    if status, _, body := admin.post("/admin/accounts/demo", form); (status != http.StatusConflict) || !strings.Contains(body, "supprimé puis recréé") {
+        t.Fatalf("a form without the identity of the account: %d", status)
+    }
+    form.Set("created", demo)
     if status, location, _ := admin.post("/admin/accounts/demo", form); (status != http.StatusSeeOther) || (location != "/admin/accounts/demo") {
         t.Fatalf("name: %d %s", status, location)
     }
     if page := admin.page("/admin/accounts/demo"); !strings.Contains(page, `name="name" value="Jean Démo"`) || !strings.Contains(admin.page("/admin/accounts"), `<td>Jean Démo</td>`) {
         t.Fatal("the name must be saved with its spaces collapsed")
     }
-    form = url.Values{"csrf": {admin.token(list)}, "action": {"name"}, "name": {strings.Repeat("x", 61)}}
+    form = url.Values{"csrf": {admin.token(list)}, "created": {demo}, "action": {"name"}, "name": {strings.Repeat("x", 61)}}
     if status, _, _ := admin.post("/admin/accounts/demo", form); status != http.StatusUnprocessableEntity {
         t.Fatalf("long name: %d", status)
     }
-    form = url.Values{"csrf": {admin.token(list)}, "action": {"sessions"}, "return": {"list"}}
+    form = url.Values{"csrf": {admin.token(list)}, "created": {demo}, "action": {"sessions"}, "return": {"list"}}
     if !strings.Contains(list, `aria-label="Fermer les sessions de demo" title="Fermer les sessions">`) {
         t.Error("accounts list without the closing of the sessions of demo")
     }
@@ -339,7 +346,7 @@ func TestAdministratorDisablesAndDeletesAnAccount(t *testing.T) {
         t.Fatalf("a closed session stays open: %d %s", status, location)
     }
     user = site.client().login("demo")
-    form = url.Values{"csrf": {admin.token(list)}, "action": {"disable"}, "return": {"list"}}
+    form = url.Values{"csrf": {admin.token(list)}, "created": {demo}, "action": {"disable"}, "return": {"list"}}
     if status, location, _ := admin.post("/admin/accounts/demo", form); (status != http.StatusSeeOther) || (location != "/admin/accounts") {
         t.Fatalf("disable: %d %s", status, location)
     }
@@ -360,19 +367,19 @@ func TestAdministratorDisablesAndDeletesAnAccount(t *testing.T) {
     }
     site.clock.Advance(10 * time.Minute)
     site.client().login("demo")
-    form = url.Values{"csrf": {admin.token(list)}, "action": {"disable"}}
+    form = url.Values{"csrf": {admin.token(list)}, "created": {root}, "action": {"disable"}}
     if status, _, _ := admin.post("/admin/accounts/root", form); status != http.StatusUnprocessableEntity {
         t.Fatalf("self disable: %d", status)
     }
-    form = url.Values{"csrf": {admin.token(list)}, "action": {"delete"}, "confirm": {"demox"}, "return": {"list"}}
+    form = url.Values{"csrf": {admin.token(list)}, "created": {demo}, "action": {"delete"}, "confirm": {"demox"}, "return": {"list"}}
     if status, _, body := admin.post("/admin/accounts/demo", form); (status != http.StatusUnprocessableEntity) || !strings.Contains(body, "<h1>Comptes</h1>") {
         t.Fatalf("a failed deletion from the list must stay on the list: %d", status)
     }
-    form = url.Values{"csrf": {admin.token(list)}, "action": {"delete"}, "confirm": {"demo"}}
+    form = url.Values{"csrf": {admin.token(list)}, "created": {demo}, "action": {"delete"}, "confirm": {"demo"}}
     if status, location, _ := admin.post("/admin/accounts/demo", form); (status != http.StatusSeeOther) || (location != "/admin/accounts") {
         t.Fatalf("delete from the list: %d %s", status, location)
     }
-    form = url.Values{"csrf": {admin.token(list)}, "action": {"sessions"}, "return": {"list"}}
+    form = url.Values{"csrf": {admin.token(list)}, "created": {root}, "action": {"sessions"}, "return": {"list"}}
     if status, _, body := admin.post("/admin/accounts/root", form); (status != http.StatusOK) || !strings.Contains(body, "Vous êtes déconnecté") {
         t.Fatalf("close one's own sessions: %d", status)
     }

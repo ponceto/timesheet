@@ -22,7 +22,7 @@ It is written for whoever builds the software. How the build scripts are written
 | Build the program | Go 1.24 or later, and `make`. |
 | Run the tests | `gcc` as well: the race detector needs cgo. |
 | Build the Debian package | A Debian system with `build-essential`, `debhelper`, `devscripts`, `golang` and `git`. |
-| Build the container image | Docker, or another builder of `Dockerfile` images, and access to the registry of the images `golang:1.24-alpine3.22` and `alpine:3.22`. |
+| Build the container image | Docker, or another builder of `Dockerfile` images, and access to the registry of the images `golang:1.27-alpine3.23` and `alpine:3.22`. |
 
 The program has no dependency besides the Go standard library: nothing is downloaded during the build, except the base images of the container image.
 
@@ -114,7 +114,7 @@ Never run `make mrproper` without a backup of the database and a commit of your 
    It runs `docker build -t timesheet .` and ends with `=== docker ok ===`.
 
 2. The build runs in two stages:
-   - in `golang:1.24-alpine3.22`, `.ci/make-build.sh` and `.ci/make-install.sh` build and install the files into a staging tree, as `make` and `make install` do; `.ci/timesheet-entrypoint.sh` is added as `/usr/bin/timesheet-entrypoint.sh`, and `config set` makes the server configuration listen on `0.0.0.0:8080`;
+   - in `golang:1.27-alpine3.23`, which receives the time zones (`tzdata`) that `config set` needs to validate `server.timezone`, `.ci/make-build.sh` and `.ci/make-install.sh` build and install the files into a staging tree, as `make` and `make install` do; `.ci/timesheet-entrypoint.sh` is added as `/usr/bin/timesheet-entrypoint.sh`, and `config set` makes the server configuration listen on `0.0.0.0:8080` and trust no proxy;
    - `alpine:3.22` receives these files, the time zones (`tzdata`) and the system account `timesheet` (uid and gid 10001).
 3. The image does not run the tests: run `make check` before.
 

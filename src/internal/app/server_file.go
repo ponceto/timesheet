@@ -108,18 +108,31 @@ func (f *ServerFile) Save(configuration activity.ServerConfiguration) error {
     if err != nil {
         return err
     }
-    directory := filepath.Dir(f.path)
+    target, existing, err := f.target()
+    if err != nil {
+        return err
+    }
+    mode := fs.FileMode(serverFileMode)
+    if existing != nil {
+        mode = existing.Mode().Perm()
+    }
+    directory := filepath.Dir(target)
     if err := os.MkdirAll(directory, serverDirectoryMode); err != nil {
         return err
     }
-    temp, err := os.CreateTemp(directory, filepath.Base(f.path) + ".*" + activity.TemporarySuffix)
+    temp, err := os.CreateTemp(directory, filepath.Base(target) + ".*" + activity.TemporarySuffix)
     if err != nil {
         return err
     }
     name := temp.Name()
     _, err = temp.Write(data)
     if err == nil {
-        err = temp.Chmod(serverFileMode)
+        err = temp.Chmod(mode)
+    }
+    if (err == nil) && (existing != nil) {
+        if err = f.keepOwner(temp, existing); err != nil {
+            err = fmt.Errorf("cannot keep the owner and the group of %s: %w", target, err)
+        }
     }
     if err == nil {
         err = temp.Sync()
@@ -128,7 +141,7 @@ func (f *ServerFile) Save(configuration activity.ServerConfiguration) error {
         err = closing
     }
     if err == nil {
-        err = os.Rename(name, f.path)
+        err = os.Rename(name, target)
     }
     if err != nil {
         os.Remove(name)
@@ -136,6 +149,29 @@ func (f *ServerFile) Save(configuration activity.ServerConfiguration) error {
     }
     f.syncDirectory(directory)
     return nil
+}
+
+func (f *ServerFile) target() (string, fs.FileInfo, error) {
+    if _, err := os.Lstat(f.path); errors.Is(err, fs.ErrNotExist) {
+        return f.path, nil, nil
+    } else if err != nil {
+        return "", nil, err
+    }
+    target, err := filepath.EvalSymlinks(f.path)
+    if errors.Is(err, fs.ErrNotExist) {
+        return "", nil, fmt.Errorf("%s is a link to a missing file", f.path)
+    }
+    if err != nil {
+        return "", nil, err
+    }
+    info, err := os.Stat(target)
+    if err != nil {
+        return "", nil, err
+    }
+    if !info.Mode().IsRegular() {
+        return "", nil, fmt.Errorf("%s is not a regular file", target)
+    }
+    return target, info, nil
 }
 
 func (f *ServerFile) syncDirectory(directory string) {

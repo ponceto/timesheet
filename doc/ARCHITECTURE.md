@@ -27,7 +27,7 @@ Purpose and French specifics:
 - Timesheet tracks the activity and the leave counters of employees working in France.
 - The domain package `internal/activity` carries the French specifics:
   - the public holidays of the thirteen French zones, metropolitan France, Alsace-Moselle and the overseas territories;
-  - the rules of paid leave, RTT (récupération temps de travail) and part-time counters;
+  - the rules of paid leave, RTT (label « Récupération temps de travail »; the legal term is réduction du temps de travail) and part-time counters;
   - the French labels.
 
 Delivery:
@@ -187,8 +187,8 @@ The records of the database marshal through them: `DayEntry`, `ActivityCode`, `L
 | `MonthStatus` | value | Status of a month |
 | `MonthEvent` | record | Event of the history of a month |
 | `MonthRecord` | record | Status and history of a month |
-| `MonthlyIndicators` | record | Snapshot of the indicators of a month |
-| `Calendar` | record | All the data of a user: revision, settings, days, adjustments, months, ledger. Lookups: `IsValidated`, `LastValidated`, `FirstOpen`, `UsesActivity`, `UsesCounter`. Its file holds `ErrStaleRevision` |
+| `MonthlyIndicators` | record | Snapshot of the indicators of a month, with `Same` to compare two snapshots |
+| `Calendar` | record | All the data of a user: revision, settings, days, adjustments, months, ledger. Lookups: `IsValidated`, `LastValidated`, `FirstOpen`, `UsesActivity`, `UsesCounter`; `KeepsHistoryOf` tells whether a new version keeps the validated months and the tracking start of the previous one. Its file holds `ErrStaleRevision` and `ErrHistoryRewritten` |
 
 #### Bookkeeping
 
@@ -333,7 +333,7 @@ A write runs these steps under one `sync.RWMutex`:
 | `OriginGuard` | service | Guard that checks the origin of an unsafe request |
 | `Origins` | value | Accepted origins and hosts |
 | `ClientAddress` | service | Address of the client behind the trusted proxies |
-| `LoginThrottle` | service | Login throttling per address |
+| `LoginThrottle` | service | Login throttling per address and per login |
 
 #### Routing
 
@@ -409,7 +409,7 @@ A write runs these steps under one `sync.RWMutex`:
 | `Usage` | service | Text of `timesheet help` |
 | `UsageError` | value | Error of usage of the command line |
 | `Application` | service | Dispatch of the commands and lifecycle of `run` (see [Lifecycle](#lifecycle)) |
-| `ServerFile` | service | Server configuration file: strict bounded reading, an error when it is missing (`ErrMissingServerFile`, which `config set` turns into the defaults), validation, atomic rewriting by `config set` |
+| `ServerFile` | service | Server configuration file: strict bounded reading, an error when it is missing (`ErrMissingServerFile`, which `config set` turns into the defaults), validation, atomic rewriting by `config set`, which follows a symbolic link and keeps the mode, the owner and the group of the file (`server_file_unix.go`) |
 | `InitCommand` | service | `init` |
 | `ConfigCommand` | service | `config show`, `config set` |
 | `UserCommand` | service | `user add`, `user profile`, `user passwd`, `user del`, `user list` |
@@ -538,7 +538,7 @@ The reasons are given in [SECURITY.md, Threat model](SECURITY.md#threat-model).
 
 1. GET `/login` sets a short-lived `ts_login` cookie that holds the token of the form.
 2. POST `/login` checks that token against the form.
-3. It throttles the attempts per client address (`LoginThrottle`).
+3. It throttles the attempts per client address and per login of valid form (`LoginThrottle`).
 4. It verifies the PBKDF2 hash of the password.
 5. When the login is unknown, it verifies a decoy hash instead, so that the timing does not reveal whether the login exists.
 6. It opens a session, which replaces the previous session of the browser.
@@ -558,6 +558,7 @@ The validation, the reopening and the adjustments compare the revision the same 
 
 1. `MonthClosing` produces a new `Calendar`: with frozen entries for a validation, with reversals for a reopening.
 2. The controller saves it like a month save, with the same revision check.
+3. Under its lock, `store.Database` refuses every `SaveCalendar` and `CheckCalendar` whose calendar does not keep the history of the stored one (`Calendar.KeepsHistoryOf`); the deletion of the data goes through `EraseCalendar`, which starts the account again from an empty calendar.
 
 ### Page display
 
@@ -572,7 +573,8 @@ The validation, the reopening and the adjustments compare the revision the same 
 | --- | --- | --- |
 | `sync.RWMutex` of `Database` | The record in memory | A read copy, or a whole write including the file |
 | file lock `<name>.lock` | The database file against a second process | The life of `run`, or of a writing command |
-| leaf lock of `Sessions` | The sessions in memory | One operation on the sessions |
+| leaf lock of `Sessions` | The sessions in memory | One operation on the sessions, without the write of the session file |
+| write lock of `Sessions` | The session file and the number of the last state written | One write of the session file, which skips a state older than the last written |
 | leaf lock of `LoginThrottle` | The counters of failed logins | One operation on the throttle |
 | leaf lock of `ManualClock` | The time of the test clock | One read or change |
 | leaf lock of `Application` | The listening address read by `Listen` | One read or change |
@@ -637,7 +639,7 @@ Its settings are specified in [SPECIFICATIONS.md, Server configuration](SPECIFIC
 10. Build the site with `web.NewSite`, which restores the saved sessions.
 11. Build the `http.Server` with the timeouts and the header size of the section `server`.
 12. Serve until the signal context ends.
-13. Shut down gracefully, within `server.shutdown_timeout`.
+13. Shut down gracefully, within `server.shutdown_timeout`, then save the sessions (`Site.Flush`).
 
 ### Other commands
 

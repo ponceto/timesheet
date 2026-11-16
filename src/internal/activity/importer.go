@@ -89,9 +89,14 @@ func (i *Importer) Run(calendar Calendar, imported ImportFile, options ImportOpt
         if next.HasHistory() {
             report.Problems = append(report.Problems, ImportProblem{Kind: importStartBeforeValidated})
         } else {
-            report.Warnings = append(report.Warnings, ImportProblem{Date: report.Dates[0], Previous: next.Settings.Start, Kind: importStartMoved})
+            if report.Dates[0] != calendar.Settings.Start {
+                report.Warnings = append(report.Warnings, ImportProblem{Date: report.Dates[0], Previous: calendar.Settings.Start, Kind: importStartMoved})
+            }
             next.Settings.Start = report.Dates[0]
         }
+    }
+    if (next.Settings.Start != calendar.Settings.Start) && next.AdjustedBefore(next.Settings.Start) {
+        report.Problems = append(report.Problems, ImportProblem{Date: next.Settings.Start, Kind: importStartAfterAdjustment})
     }
     book := NewBookkeeper(i.config, next)
     for _, d := range report.Dates {
@@ -167,8 +172,6 @@ func (i *Importer) apply(calendar *Calendar, settings *ImportSettings) []ImportP
         switch {
             case locked:
                 problems = append(problems, ImportProblem{Kind: importStartLocked})
-            case calendar.AdjustedBefore(*settings.Start):
-                problems = append(problems, ImportProblem{Date: *settings.Start, Kind: importStartAfterAdjustment})
             default:
                 calendar.Settings.Start = *settings.Start
         }

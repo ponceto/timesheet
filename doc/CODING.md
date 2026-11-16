@@ -708,8 +708,8 @@ The scripts that call `go` (`make-build.sh`, `make-check.sh`, `make-clean.sh`) e
 
 ### Container image
 
-- `Dockerfile`, at the repository root, has two stages, `golang:1.24-alpine3.22` then `alpine:3.22`, each image pinned to its version.
-- The build stage runs `.ci/make-build.sh`, then `.ci/make-install.sh` with `DESTDIR=/stage`, adds `.ci/timesheet-entrypoint.sh` as `/usr/bin/timesheet-entrypoint.sh`, and sets `server.listen` to `0.0.0.0:8080` with `config set`: the image installs the same files as the package.
+- `Dockerfile`, at the repository root, has two stages, `golang:1.27-alpine3.23` then `alpine:3.22`, each image pinned to its version; the Go version of the build stage is a supported release of Go, raised when it leaves support, while `go.mod` keeps `go 1.24`.
+- The build stage installs `tzdata`, since `config set` validates `server.timezone` and the binary does not embed the time zones, runs `.ci/make-build.sh`, then `.ci/make-install.sh` with `DESTDIR=/stage`, adds `.ci/timesheet-entrypoint.sh` as `/usr/bin/timesheet-entrypoint.sh`, and sets `server.listen` to `0.0.0.0:8080` and empties `server.trusted_proxies` with `config set`: the image installs the same files as the package.
 - The runtime stage installs `tzdata`, since the binary does not embed the time zones, and creates the account `timesheet`, uid and gid 10001; it runs as that account, with the volumes `/var/lib/timesheet` and `/etc/timesheet`.
 - `.dockerignore` excludes everything, then lets in only what the build reads: never `var/lib/timesheet/`, which holds a real database, nor `.git`.
 - `.ci/timesheet-entrypoint.sh` adds `--config=/etc/timesheet/timesheet.json` to every command; before `run`, when the database is missing, it runs `init` and `user add <login> --profile=ADMIN --provisional`, with the login of `TIMESHEET_USERNAME` or `admin`, and `TIMESHEET_PASSWORD` or the default password, and stops on the first failure ([Bootstrap](SPECIFICATIONS.md#bootstrap)).
@@ -720,9 +720,10 @@ The scripts that call `go` (`make-build.sh`, `make-check.sh`, `make-clean.sh`) e
 `.ci/ci-build-package.sh` builds the binary packages in the working tree, uncommitted changes included:
 
 1. In CI only (variable `CI` set), it first adds a changelog entry versioned `<version of debian/changelog>+<YYYYMMDDhhmmss>`.
-2. It runs `dpkg-buildpackage --build=any,all --no-sign`, which runs `make clean`, `make`, the tests (`make check`, hence gcc), then `make install`, and stops if a test fails.
-3. `dpkg-buildpackage` writes the packages next to the repository, in its parent directory.
-4. The script moves them into `_dist/`: `.deb`, `.buildinfo`, `.changes`, and the `timesheet-dbgsym_*` files; it fails when no `timesheet-dbgsym_*` file exists.
+2. It prints the version of the Go toolchain with `go version`, and stops when `go` is missing.
+3. It runs `dpkg-buildpackage --build=any,all --no-sign`, which runs `make clean`, `make`, the tests (`make check`, hence gcc), then `make install`, and stops if a test fails.
+4. `dpkg-buildpackage` writes the packages next to the repository, in its parent directory.
+5. The script moves them into `_dist/`: `.deb`, `.buildinfo`, `.changes`, and the `timesheet-dbgsym_*` files; it fails when no `timesheet-dbgsym_*` file exists.
 
 ### Scripts
 

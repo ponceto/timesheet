@@ -128,6 +128,10 @@ func (s *Site) Handler() http.Handler {
     return s.handler
 }
 
+func (s *Site) Flush() {
+    s.sessions.Flush()
+}
+
 func (s *Site) Routes() []Route {
     return s.router.Routes()
 }

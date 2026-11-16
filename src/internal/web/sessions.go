@@ -38,23 +38,32 @@ import (
 // ---------------------------------------------------------------------------
 
 type Sessions struct {
-    mu       sync.Mutex
-    clock    activity.Clock
-    random   io.Reader
-    secure   bool
-    sliding  time.Duration
-    absolute time.Duration
-    max      int
-    interval time.Duration
-    sessions map[string]*Session
-    archive  SessionArchive
-    logger   *slog.Logger
-    saved    time.Time
+    mu         sync.Mutex
+    writing    sync.Mutex
+    clock      activity.Clock
+    random     io.Reader
+    secure     bool
+    sliding    time.Duration
+    absolute   time.Duration
+    max        int
+    interval   time.Duration
+    sessions   map[string]*Session
+    archive    SessionArchive
+    logger     *slog.Logger
+    saved      time.Time
+    generation int64
+    written    int64
+}
+
+type sessionSnapshot struct {
+    records    []account.SessionRecord
+    generation int64
 }
 
 const (
     SessionCookie = "ts_session"
     sessionBytes  = 32
+    securePrefix  = "__Host-"
 )
 
 var ErrRandomFailure = errors.New("web: random source failed")
@@ -69,7 +78,6 @@ func NewSessions(clock activity.Clock, random io.Reader, secure bool, settings a
 
 func (s *Sessions) Restore(archive SessionArchive, logger *slog.Logger) {
     s.mu.Lock()
-    defer s.mu.Unlock()
     s.archive, s.logger = archive, logger
     records, err := archive.LoadSessions()
     if err != nil {
@@ -82,23 +90,45 @@ func (s *Sessions) Restore(archive SessionArchive, logger *slog.Logger) {
             s.sessions[record.Key] = session
         }
     }
-    s.save(now)
+    snapshot := s.snapshot(now)
+    s.mu.Unlock()
+    s.write(snapshot)
 }
 
-func (s *Sessions) save(now time.Time) {
+func (s *Sessions) Flush() {
+    s.mu.Lock()
+    snapshot := s.snapshot(s.clock.Now())
+    s.mu.Unlock()
+    s.write(snapshot)
+}
+
+func (s *Sessions) snapshot(now time.Time) sessionSnapshot {
     if s.archive == nil {
-        return
+        return sessionSnapshot{}
     }
     records := []account.SessionRecord{}
     for key, session := range s.sessions {
         records = append(records, account.SessionRecord{Key: key, Login: session.login, CSRF: session.csrf, Created: session.created, Seen: session.seen})
     }
     slices.SortFunc(records, s.compare)
-    if err := s.archive.SaveSessions(records); err != nil {
-        s.logger.Error("cannot save the sessions", "error", err.Error())
+    s.generation++
+    s.saved = now
+    return sessionSnapshot{records: records, generation: s.generation}
+}
+
+func (s *Sessions) write(snapshot sessionSnapshot) {
+    if snapshot.generation == 0 {
         return
     }
-    s.saved = now
+    s.writing.Lock()
+    defer s.writing.Unlock()
+    if snapshot.generation <= s.written {
+        return
+    }
+    s.written = snapshot.generation
+    if err := s.archive.SaveSessions(snapshot.records); err != nil {
+        s.logger.Error("cannot save the sessions", "error", err.Error())
+    }
 }
 
 func (s *Sessions) compare(a account.SessionRecord, b account.SessionRecord) int {
@@ -128,7 +158,6 @@ func (s *Sessions) Open(login account.Login, previous string) (string, error) {
         return "", err
     }
     s.mu.Lock()
-    defer s.mu.Unlock()
     now := s.clock.Now()
     if previous != "" {
         delete(s.sessions, s.Hash(previous))
@@ -147,7 +176,9 @@ func (s *Sessions) Open(login account.Login, previous string) (string, error) {
         delete(s.sessions, oldestKey)
     }
     s.sessions[s.Hash(id)] = NewSession(login, csrf, now)
-    s.save(now)
+    snapshot := s.snapshot(now)
+    s.mu.Unlock()
+    s.write(snapshot)
     return id, nil
 }
 
@@ -157,21 +188,27 @@ func (s *Sessions) Lookup(id string) (account.Login, string, string, bool) {
     }
     key := s.Hash(id)
     s.mu.Lock()
-    defer s.mu.Unlock()
     session, ok := s.sessions[key]
     now := s.clock.Now()
     if !ok || session.Expired(now, s.sliding, s.absolute) {
+        snapshot := sessionSnapshot{}
         if ok {
             delete(s.sessions, key)
-            s.save(now)
+            snapshot = s.snapshot(now)
         }
+        s.mu.Unlock()
+        s.write(snapshot)
         return "", "", "", false
     }
     session.seen = now
+    snapshot := sessionSnapshot{}
     if now.Sub(s.saved) >= s.interval {
-        s.save(now)
+        snapshot = s.snapshot(now)
     }
-    return session.login, session.csrf, key, true
+    login, csrf := session.login, session.csrf
+    s.mu.Unlock()
+    s.write(snapshot)
+    return login, csrf, key, true
 }
 
 func (s *Sessions) SetNotice(key string, code string) {
@@ -205,20 +242,22 @@ func (s *Sessions) Created(key string) time.Time {
 
 func (s *Sessions) Close(key string) {
     s.mu.Lock()
-    defer s.mu.Unlock()
     delete(s.sessions, key)
-    s.save(s.clock.Now())
+    snapshot := s.snapshot(s.clock.Now())
+    s.mu.Unlock()
+    s.write(snapshot)
 }
 
 func (s *Sessions) CloseAccount(login account.Login, keep string) {
     s.mu.Lock()
-    defer s.mu.Unlock()
     for key, session := range s.sessions {
         if (session.login == login) && (key != keep) {
             delete(s.sessions, key)
         }
     }
-    s.save(s.clock.Now())
+    snapshot := s.snapshot(s.clock.Now())
+    s.mu.Unlock()
+    s.write(snapshot)
 }
 
 func (s *Sessions) Count(login account.Login) int {
@@ -242,8 +281,15 @@ func (s *Sessions) prune(now time.Time) {
     }
 }
 
+func (s *Sessions) CookieName(name string) string {
+    if s.secure {
+        return securePrefix + name
+    }
+    return name
+}
+
 func (s *Sessions) Cookie(name string, value string, maxAge int) *http.Cookie {
-    return &http.Cookie{Name: name, Value: value, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteStrictMode}
+    return &http.Cookie{Name: s.CookieName(name), Value: value, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteStrictMode}
 }
 
 // ---------------------------------------------------------------------------

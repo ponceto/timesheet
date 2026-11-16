@@ -46,7 +46,7 @@ const (
     maxBudgetWindow     = time.Hour
     maxNewAddresses     = 10000
     minTrackedAddresses = 16
-    maxTrackedAddresses = 1000000
+    maxTrackedAddresses = 65536
     maxForgetAfter      = 7 * 24 * time.Hour
 )
 
