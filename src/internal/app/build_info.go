@@ -33,7 +33,7 @@ type BuildInfo struct {
     modified bool
 }
 
-const ReleaseVersion = "0.50.0"
+const ReleaseVersion = "0.51.0"
 
 // ---------------------------------------------------------------------------
 // BuildInfo implementation
