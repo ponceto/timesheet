@@ -196,7 +196,7 @@ Then follow the [User guide](doc/USER-GUIDE.md).
 
 - From the repository: `bin/timesheet.sh` from any directory, or `bin/timesheet run --database=var/lib/timesheet/timesheet-database.json --config=etc/timesheet/timesheet.json` from the root (see [Getting started](#getting-started)).
 - As a service: build the Debian or RPM package, install it, then create the first administrator (see [Debian package](doc/OPERATIONS.md#debian-package) or [RPM package](doc/OPERATIONS.md#rpm-package)).
-- In a container: build the image with `make docker`, then run it with a volume for the database; its first start creates the database and an administrator, `admin` or `TIMESHEET_USERNAME`, whose password, `Tms@Admin%26` or `TIMESHEET_PASSWORD`, must be changed at the first login (see [Container](doc/OPERATIONS.md#container)).
+- In a container: build the image with `make docker`, then run it with a volume for the database; its first start creates the database and an administrator, `admin` or `TIMESHEET_USERNAME`, whose password, `Tms@Admin%26` or `TIMESHEET_PASSWORD`, must be changed at the first login (see [Container](doc/OPERATIONS.md#container)). `docker compose up -d --build` builds the image and starts it on `http://localhost:8080` in one step, with the administrator `admin` and the password `Tms@Admin%26` of `.env.docker.local`, the default password of the image, to be changed at the first login (see [With Docker Compose](doc/OPERATIONS.md#with-docker-compose)).
 
 Everything else about running the server is in [doc/OPERATIONS.md](doc/OPERATIONS.md): server configuration, network and reverse proxy, logs, import, backup and restore, recovery, upgrade and troubleshooting.
 

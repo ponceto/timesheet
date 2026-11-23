@@ -141,7 +141,8 @@ Never run `make mrproper` without a backup of the database and a commit of your 
 3. The image does not run the tests: run `make check` before.
 
 - The image is built from the working tree, uncommitted changes included. `.dockerignore` sends only the sources, the build and installation scripts, the entry point, the server configuration and `share/timesheet/`: never the database under `var/lib/timesheet/`, nor `.git`, so `version` prints only the release number.
-- Running the image is described in [OPERATIONS.md](OPERATIONS.md#container).
+- `docker compose build`, or `docker compose up --build`, builds the same image `timesheet` from `docker-compose.yml`.
+- Running the image is described in [OPERATIONS.md](OPERATIONS.md#container), with Docker Compose in [OPERATIONS.md](OPERATIONS.md#with-docker-compose).
 
 ## VERSION
 

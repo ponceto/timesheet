@@ -523,6 +523,22 @@ To import, mount the file, readable by the uid 10001: add `-v "$PWD/<file>.json:
 - Upgrade: back up, rebuild the image ([BUILD.md](BUILD.md#build-the-container-image)), remove the container (`docker rm -f timesheet`), then start it again as in step 1 of [First start](#first-start), with the same volumes. The [migration notes](SPECIFICATIONS.md#migration-notes) apply as to any installation.
 - The volume `timesheet-config` keeps the server configuration of the image that created it. One created by an image that still trusted the private ranges keeps trusting them: run `docker exec timesheet timesheet config set server.trusted_proxies '' --config=/etc/timesheet/timesheet.json`, then `docker restart timesheet`.
 
+### With Docker Compose
+
+`docker-compose.yml`, at the root of the repository, describes the same container as the `docker run` of [Start the container](#start-the-container): the image `timesheet` built from the `Dockerfile`, the container `timesheet`, the port 8080 published on the loopback only and the volumes `timesheet-data` and `timesheet-config`. The `docker` commands of this section therefore apply to it as well.
+
+From the root of the repository:
+
+```sh
+docker compose up -d --build
+```
+
+- `up --build` builds the image, as `make docker` does, then creates and starts the container; the first start creates the database and its administrator ([First start](#first-start)). Then open `http://localhost:8080`.
+- `TIMESHEET_USERNAME` and `TIMESHEET_PASSWORD` come from `.env.docker.local`, at the root of the repository: `admin` and `Tms@Admin%26`, the default password of the image. Log in with them, then choose a new password in « Mon profil », as at any first start. To choose others, edit the file before the first start: the password follows the policy of [First start](#first-start), or the container stops with exit 1. Once the database exists, the file is no longer read, but its password stays readable with `docker inspect`, as with `-e`.
+- `docker compose logs` shows the log, `docker compose stop` and `docker compose start` stop and start the container again, `docker compose down` removes the container and keeps the volumes.
+- `docker compose down -v` removes the volumes too, which erases the database, the sessions and the server configuration for good ([Remove the volumes of the container](#remove-the-volumes-of-the-container)).
+- A container created by `docker run` under the name `timesheet` must be removed first ([Remove the container](#remove-the-container)): Compose then finds the database of its volumes again.
+
 ## BACKUP AND RESTORE
 
 To back up, copy the database file. Writes are atomic, so a copy is consistent even while the server runs.

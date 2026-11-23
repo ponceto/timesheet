@@ -176,11 +176,11 @@ In a file with a build constraint, `//go:build ...` is the very first line, foll
 | Files | Syntax | Checked by |
 | --- | --- | --- |
 | `.go` files | `/* … */` block, as above | review |
-| `Makefile`, `bin/timesheet.sh`, `Dockerfile`, the scripts and the configuration of `.ci/`, `debian/timesheet.service`, `rpm/timesheet.spec` | the same text in `#` comments | review |
+| `Makefile`, `bin/timesheet.sh`, `Dockerfile`, `docker-compose.yml`, the scripts and the configuration of `.ci/`, `debian/timesheet.service`, `rpm/timesheet.spec` | the same text in `#` comments | review |
 | Style sheets (`.css`) and scripts (`.js`) of `internal/web` | the same `/* … */` block at the very top, followed by a blank line | `TestWebSourcesStartWithTheLicenceHeader`, file name included |
 | Templates (`.html`) of `internal/web` | the same block inside a template comment, `{{- /* … */ -}}`, on the first lines, which keeps it out of the pages sent | `TestWebSourcesStartWithTheLicenceHeader`, file name included |
 
-`debian/postinst` has section banners but no licence header; `debian/rules` and `.dockerignore` have neither.
+`debian/postinst` has section banners but no licence header; `debian/rules`, `.dockerignore` and `.env.docker.local` have neither.
 
 ### Indentation
 
@@ -201,7 +201,7 @@ In a file with a build constraint, `//go:build ...` is the very first line, foll
 | Files | Allowed |
 | --- | --- |
 | Go | The licence header; the section banners (`// ---…`) and their titles; the directives `//go:build` and `//go:embed` |
-| `Makefile`, `bin/timesheet.sh`, `Dockerfile`, the files of `.ci/`, `debian/timesheet.service`, `rpm/timesheet.spec` | The licence header; the section banners with their titles |
+| `Makefile`, `bin/timesheet.sh`, `Dockerfile`, `docker-compose.yml`, the files of `.ci/`, `debian/timesheet.service`, `rpm/timesheet.spec` | The licence header; the section banners with their titles |
 | CSS, JavaScript, templates | The licence header and nothing else: no `//`, no other `/* */`, no `<!-- -->`, no other `{{/* */}}`; a style sheet has no section title |
 
 ### Checks
@@ -717,6 +717,7 @@ The scripts that call `go` (`make-build.sh`, `make-check.sh`, `make-clean.sh`) e
 - The runtime stage installs `tzdata`, since the binary does not embed the time zones, and creates the account `timesheet`, uid and gid 10001; it runs as that account, with the volumes `/var/lib/timesheet` and `/etc/timesheet`.
 - `.dockerignore` excludes everything, then lets in only what the build reads: never `var/lib/timesheet/`, which holds a real database, nor `.git`.
 - `.ci/timesheet-entrypoint.sh` adds `--config=/etc/timesheet/timesheet.json` to every command; before `run`, when the database is missing, it runs `init` and `user add <login> --profile=ADMIN --provisional`, with the login of `TIMESHEET_USERNAME` or `admin`, and `TIMESHEET_PASSWORD` or the default password, and stops on the first failure ([Bootstrap](SPECIFICATIONS.md#bootstrap)).
+- `docker-compose.yml`, at the repository root, builds the image `timesheet` from the `Dockerfile` and runs the container `timesheet` as the `docker run` of [OPERATIONS.md](OPERATIONS.md#start-the-container) does: the port 8080 published on `127.0.0.1` only, the volumes named `timesheet-data` and `timesheet-config` with `name:` so that Compose does not prefix them, and `TIMESHEET_USERNAME` and `TIMESHEET_PASSWORD` read from `.env.docker.local` with `env_file`, whose password `Tms@Admin%26`, the default password of the image, follows the password policy; its keys are indented with 4 spaces.
 - How to build the image is described in [BUILD.md](BUILD.md#build-the-container-image), how to run it in [OPERATIONS.md](OPERATIONS.md#container).
 
 ### Building the package
