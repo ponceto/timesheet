@@ -106,4 +106,31 @@
                     </fieldset>
                 </form>
             </section>
+            <section>
+                <h2>Fournisseurs d'IA</h2>
+                <p>Les fournisseurs proposés aux souscriptions de l'assistant. L'assistant n'appelle que ces adresses ; la liste se change dans la base de données.</p>
+                <table class="providers">
+                    <caption>{{len .Providers}} fournisseur(s)</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Fournisseur</th>
+                            <th scope="col">Format</th>
+                            <th scope="col">Adresse</th>
+                            <th scope="col">Modèle par défaut</th>
+                            <th scope="col">Modèles suggérés</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+{{- range .Providers}}
+                        <tr>
+                            <th scope="row">{{.Label}}</th>
+                            <td><code>{{.Format}}</code></td>
+                            <td><code>{{.BaseURL}}</code></td>
+                            <td><code>{{.DefaultModel}}</code></td>
+                            <td>{{range $index, $model := .Models}}{{if $index}}, {{end}}<code>{{$model}}</code>{{end}}</td>
+                        </tr>
+{{- end}}
+                    </tbody>
+                </table>
+            </section>
 {{end}}{{end}}

@@ -33,6 +33,7 @@ type Chrome struct {
     ProfileLabel string
     CSRF         string
     Year         int
+    Assistant    bool
 }
 
 const (

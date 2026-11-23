@@ -51,5 +51,15 @@
     "accounts": 200,
     "account_bytes": 1048576,
     "adjustments": 1000
+  },
+  "assistant": {
+    "timeout": "1m",
+    "max_rounds": 4,
+    "max_tokens": 4096,
+    "conversations": 50,
+    "exchanges": 20,
+    "question_bytes": 4000,
+    "download_ttl": "30m",
+    "download_sweep": "5m"
   }
 }

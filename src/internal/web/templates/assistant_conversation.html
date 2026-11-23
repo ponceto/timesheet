@@ -1,0 +1,125 @@
+{{- /*
+ * assistant_conversation.html - Copyright (c) 2023-2026 - Olivier Poncet
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */ -}}
+{{define "title"}}Assistant{{end}}
+{{define "content"}}{{with .Data}}            <header class="page-header">
+                <h1>{{.Title}}</h1>
+                <p>Souscription : {{.Subscription}}. <a href="/dashboard/assistant">Toutes les conversations</a></p>
+            </header>
+            <section>
+                <h2>Échanges</h2>
+                <ol class="exchanges">
+{{- range .Exchanges}}
+                    <li>
+                        <article class="exchange">
+                            <h3>Question {{.Number}}, <time datetime="{{.AskedDate}}">{{.Asked}}</time></h3>
+                            <blockquote class="question">
+{{- range .Question}}
+                                <p>{{.}}</p>
+{{- end}}
+                            </blockquote>
+{{- if .Waiting}}
+                            <p role="status" class="is-waiting">Réponse en cours de préparation…</p>
+{{- else if .Failure}}
+                            <p role="alert">{{.Failure}}</p>
+{{- else}}
+                            <section class="answer" aria-label="Réponse {{.Number}}">
+{{template "markdown" .Answer}}                            </section>
+{{- if .Model}}
+                            <p><small>Réponse de {{.Model}}</small></p>
+{{- end}}
+{{- end}}
+                        </article>
+                    </li>
+{{- end}}
+                </ol>
+            </section>
+{{- with .Pending}}
+            <section class="pending-action">
+                <h2>Action à confirmer</h2>
+                <p>Proposée le {{.Proposed}}. Rien n'est écrit tant que vous ne confirmez pas.</p>
+                <ul>
+{{- range .Summary}}
+                    <li>{{.}}</li>
+{{- end}}
+                </ul>
+                <form method="post" action="/dashboard/assistant">
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="conversation" value="{{$.Data.ID}}">
+                    <p class="actions"><button type="submit" name="action" value="confirm">Confirmer</button> <button type="submit" name="action" value="cancel" class="danger">Annuler</button></p>
+                </form>
+            </section>
+{{- end}}
+{{- if .Usable}}
+            <section>
+                <h2>Poursuivre</h2>
+                <form method="post" action="/dashboard/assistant" class="question-form">
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="action" value="ask">
+                    <input type="hidden" name="conversation" value="{{.ID}}">
+                    <fieldset>
+                        <legend>Votre question</legend>
+                        <label class="field"><span class="field-name">Question</span><textarea name="question" rows="4" maxlength="{{.MaxQuestion}}" required>{{.Question}}</textarea></label>
+                        <p><small>Entrée envoie la question, Maj+Entrée passe à la ligne.</small></p>
+                        <p class="actions"><button type="submit"{{if .Running}} disabled{{end}}>Envoyer</button></p>
+                    </fieldset>
+                </form>
+            </section>
+{{- end}}
+            <section>
+                <h2>Supprimer</h2>
+                <form method="post" action="/dashboard/assistant">
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="conversation" value="{{.ID}}">
+                    <p class="actions"><button type="submit" class="danger">Supprimer cette conversation</button></p>
+                </form>
+            </section>
+{{end}}{{end}}
+{{define "markdown"}}
+{{- range .}}
+{{- if eq .Kind "paragraph"}}                                <p>{{template "inlines" .Text}}</p>
+{{else if eq .Kind "heading"}}{{if eq .Level 4}}                                <h4>{{template "inlines" .Text}}</h4>
+{{else if eq .Level 5}}                                <h5>{{template "inlines" .Text}}</h5>
+{{else}}                                <h6>{{template "inlines" .Text}}</h6>
+{{end}}{{else if eq .Kind "list"}}{{if .Ordered}}                                <ol>
+{{else}}                                <ul>
+{{end}}{{range .Items}}                                    <li>{{template "inlines" .}}</li>
+{{end}}{{if .Ordered}}                                </ol>
+{{else}}                                </ul>
+{{end}}{{else if eq .Kind "table"}}                                <table>
+                                    <caption>Tableau {{.Number}}</caption>
+                                    <thead>
+                                        <tr>
+{{range .Header}}                                            <th scope="col">{{template "inlines" .}}</th>
+{{end}}                                        </tr>
+                                    </thead>
+                                    <tbody>
+{{range .Rows}}                                        <tr>
+{{range .}}                                            <td>{{template "inlines" .}}</td>
+{{end}}                                        </tr>
+{{end}}                                    </tbody>
+                                </table>
+{{else if eq .Kind "code"}}                                <pre><code>{{.Code}}</code></pre>
+{{else if eq .Kind "quote"}}                                <blockquote><p>{{template "inlines" .Text}}</p></blockquote>
+{{else if eq .Kind "rule"}}                                <hr>
+{{end}}
+{{- end}}
+{{- end}}
+{{define "inlines"}}{{range .}}{{if eq .Kind "strong"}}<strong>{{.Text}}</strong>{{else if eq .Kind "em"}}<em>{{.Text}}</em>{{else if eq .Kind "code"}}<code>{{.Text}}</code>{{else if eq .Kind "link"}}{{if .Download}}<a href="{{.Href}}" download>{{.Text}}</a>{{else}}<a href="{{.Href}}" rel="noopener noreferrer">{{.Text}}</a>{{end}}{{else}}{{.Text}}{{end}}{{end}}{{end}}
+{{define "scripts"}}
+        <script type="module" src="/static/js/assistant_page.js"></script>
+{{- end}}

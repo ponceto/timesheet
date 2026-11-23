@@ -44,6 +44,7 @@ An existing history, kept in a spreadsheet for instance, can be converted to a J
 - The activity codes and the counters are configurable. The calendar of public holidays and the rules are French: the application is not meant, as it stands, for another country.
 - The rules are choices of the application, simpler than common French practice: see [Simplifications](doc/SPECIFICATIONS.md#simplifications).
 - One static binary, no external service: it runs on a workstation or a small server.
+- An optional AI assistant answers questions on your own data, in French, with Markdown tables, through your own API key of Mistral, Anthropic, OpenAI or Google, which you can share with other accounts; the writes it proposes are applied only once you confirm them, and it can give your export as a download link valid for 30 minutes (see [Use the assistant](doc/USER-GUIDE.md#use-the-assistant)).
 - Each user imports a file, exports their data in the same JSON format and erases them, from « Mes données ».
 - Although it supports several accounts, it is essentially meant for personal use.
 - The database is, for now, a single JSON file; SQLite and other databases are planned for the future.
@@ -75,7 +76,7 @@ An existing history, kept in a spreadsheet for instance, can be converted to a J
 - Hand-written HTML, CSS and JavaScript. The pages work without JavaScript.
 - The activity codes, the counters, the accounts and the data live in one JSON file, the database, rewritten atomically at each change.
 - The server configuration (address, origins, database path, timeouts, sessions, login throttle, limits) is a second JSON file.
-- The open sessions are saved in a third file, next to the database.
+- The open sessions are saved in a third file, next to the database, and the key that seals the API keys of the AI subscriptions in a fourth one.
 
 ```text
 .ci/    scripts run by the Makefile targets and by the continuous integration
@@ -86,7 +87,7 @@ doc/    ARCHITECTURE.md  BUILD.md  CODING.md  OPERATIONS.md  SECURITY.md  SPECIF
 etc/    timesheet/timesheet.json (the server configuration, installed as is by the packages)
 share/  timesheet/ (configuration template read by init, example database, import template)
 src/    Go sources
-var/    lib/timesheet/ (database of the repository, given with --database, its lock and its session file)
+var/    lib/timesheet/ (database of the repository, given with --database, its lock, its session file and its key file)
 ```
 
 ### Documentation
@@ -96,9 +97,9 @@ var/    lib/timesheet/ (database of the repository, given with --database, its l
 | [doc/USER-GUIDE.md](doc/USER-GUIDE.md) | Concepts, activity codes, pages and profiles; the tasks of the employee and of the administrator; the labels shown on screen. |
 | [doc/BUILD.md](doc/BUILD.md) | Requirements, `make` targets, installation of the files, Debian and RPM packages, container image. |
 | [doc/OPERATIONS.md](doc/OPERATIONS.md) | Commands, server configuration, network, logs, import, example database, Debian and RPM packages, container, backup, recovery, upgrade, troubleshooting. |
-| [doc/SPECIFICATIONS.md](doc/SPECIFICATIONS.md) | The functional reference: glossary, profiles, entries, counters and bookkeeping, pages, routes, database schema, server configuration, command line, import format, logs, limits, personal data, simplifications, migration notes. |
+| [doc/SPECIFICATIONS.md](doc/SPECIFICATIONS.md) | The functional reference: glossary, profiles, entries, counters and bookkeeping, pages, AI assistant, routes, database schema, server configuration, command line, import format, logs, limits, personal data, simplifications, migration notes. |
 | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) | Packages, entities, HTTP chain, concurrency, persistence, lifecycle. Start with [Packages](doc/ARCHITECTURE.md#packages). |
-| [doc/SECURITY.md](doc/SECURITY.md) | Threat model, sessions, passwords, login throttling, transport, data protection, accepted risks. |
+| [doc/SECURITY.md](doc/SECURITY.md) | Threat model, sessions, passwords, login throttling, transport, AI assistant, data protection, accepted risks. |
 | [doc/CODING.md](doc/CODING.md) | The rules of the code: dependencies, file layout, templates, styles, tests, Makefile, packaging, commits. Before a commit, see [Checks before a commit](doc/CODING.md#checks-before-a-commit). |
 
 ## REQUIREMENTS

@@ -29,12 +29,13 @@ import (
 // ---------------------------------------------------------------------------
 
 type ServerConfiguration struct {
-    Server    ServerSettings   `json:"server"`
-    Database  DatabaseSettings `json:"database"`
-    Sessions  SessionSettings  `json:"sessions"`
-    Login     LoginSettings    `json:"login"`
-    Passwords PasswordSettings `json:"passwords"`
-    Limits    LimitSettings    `json:"limits"`
+    Server    ServerSettings    `json:"server"`
+    Database  DatabaseSettings  `json:"database"`
+    Sessions  SessionSettings   `json:"sessions"`
+    Login     LoginSettings     `json:"login"`
+    Passwords PasswordSettings  `json:"passwords"`
+    Limits    LimitSettings     `json:"limits"`
+    Assistant AssistantSettings `json:"assistant"`
 }
 
 type serverConfigurationKey struct {
@@ -56,7 +57,7 @@ var ErrUnknownSetting = errors.New("activity: unknown setting")
 // ---------------------------------------------------------------------------
 
 func NewDefaultServerConfiguration() ServerConfiguration {
-    return ServerConfiguration{Server: NewDefaultServerSettings(), Database: NewDefaultDatabaseSettings(), Sessions: NewDefaultSessionSettings(), Login: NewDefaultLoginSettings(), Passwords: NewDefaultPasswordSettings(), Limits: NewDefaultLimitSettings()}
+    return ServerConfiguration{Server: NewDefaultServerSettings(), Database: NewDefaultDatabaseSettings(), Sessions: NewDefaultSessionSettings(), Login: NewDefaultLoginSettings(), Passwords: NewDefaultPasswordSettings(), Limits: NewDefaultLimitSettings(), Assistant: NewDefaultAssistantSettings()}
 }
 
 func NewOptionalServerConfiguration() ServerConfiguration {
@@ -66,7 +67,7 @@ func NewOptionalServerConfiguration() ServerConfiguration {
 }
 
 func (c ServerConfiguration) Validate() error {
-    checks := []func() error{c.Server.Validate, c.Database.Validate, c.Sessions.Validate, c.Login.Validate, c.Passwords.Validate, c.Limits.Validate}
+    checks := []func() error{c.Server.Validate, c.Database.Validate, c.Sessions.Validate, c.Login.Validate, c.Passwords.Validate, c.Limits.Validate, c.Assistant.Validate}
     for _, check := range checks {
         if err := check(); err != nil {
             return err
@@ -111,7 +112,7 @@ func (c *ServerConfiguration) Set(name string, value string) error {
 }
 
 func (c *ServerConfiguration) keys() []serverConfigurationKey {
-    server, database, sessions, login, passwords, limits := &c.Server, &c.Database, &c.Sessions, &c.Login, &c.Passwords, &c.Limits
+    server, database, sessions, login, passwords, limits, assistant := &c.Server, &c.Database, &c.Sessions, &c.Login, &c.Passwords, &c.Limits, &c.Assistant
     return []serverConfigurationKey{
         c.text("server.listen", &server.Listen),
         c.list("server.origins", &server.Origins),
@@ -147,6 +148,14 @@ func (c *ServerConfiguration) keys() []serverConfigurationKey {
         c.integer("limits.accounts", &limits.Accounts),
         c.integer("limits.account_bytes", &limits.AccountBytes),
         c.integer("limits.adjustments", &limits.Adjustments),
+        c.duration("assistant.timeout", &assistant.Timeout),
+        c.integer("assistant.max_rounds", &assistant.MaxRounds),
+        c.integer("assistant.max_tokens", &assistant.MaxTokens),
+        c.integer("assistant.conversations", &assistant.Conversations),
+        c.integer("assistant.exchanges", &assistant.Exchanges),
+        c.integer("assistant.question_bytes", &assistant.QuestionBytes),
+        c.duration("assistant.download_ttl", &assistant.DownloadTTL),
+        c.duration("assistant.download_sweep", &assistant.DownloadSweep),
     }
 }
 

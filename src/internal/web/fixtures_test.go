@@ -20,7 +20,9 @@ package web
 import (
     "bytes"
     "crypto/rand"
+    "encoding/json"
     "html"
+    "io"
     "log/slog"
     "mime/multipart"
     "net/http"
@@ -29,6 +31,7 @@ import (
     "net/url"
     "path/filepath"
     "regexp"
+    "slices"
     "strings"
     "sync"
     "testing"
@@ -66,9 +69,15 @@ type testClient struct {
 
 func newTestSite(t *testing.T) *testSite {
     t.Helper()
+    return newTestSiteWith(t, nil)
+}
+
+func newTestSiteWith(t *testing.T, client *http.Client) *testSite {
+    t.Helper()
     logs := &testJournal{}
     logger := slog.New(slog.NewTextHandler(logs, nil))
-    database := store.NewDatabase(filepath.Join(t.TempDir(), "timesheet.json"), logger, activity.NewDefaultDatabaseSettings().MaxBytes, activity.NewDefaultLimitSettings())
+    path := filepath.Join(t.TempDir(), "timesheet.json")
+    database := store.NewDatabase(path, logger, activity.NewDefaultDatabaseSettings().MaxBytes, activity.NewDefaultLimitSettings())
     if err := database.Create(activity.NewDefaultConfiguration()); err != nil {
         t.Fatal(err)
     }
@@ -88,14 +97,88 @@ func newTestSite(t *testing.T) *testSite {
     }
     server := activity.NewDefaultServerConfiguration()
     server.Database.Path = "/srv/timesheet/timesheet-database.json"
-    s.site, err = NewSite(SiteDependencies{Repository: database, Server: server, Clock: clock, Random: rand.Reader, Logger: logger, Origins: origins, Iterations: account.MinIterations, Version: "test"})
+    s.site, err = NewSite(SiteDependencies{Repository: database, Server: server, Clock: clock, Random: rand.Reader, Logger: logger, Origins: origins, Iterations: account.MinIterations, Version: "test", Client: client, Downloads: store.NewDownloadStore(path + activity.DownloadsSuffix, logger)})
     if err != nil {
         t.Fatal(err)
     }
     s.server.Config.Handler = s.site.Handler()
     s.server.Start()
+    t.Cleanup(s.site.Stop)
     t.Cleanup(s.server.Close)
     return s
+}
+
+type fakeProvider struct {
+    mu       sync.Mutex
+    server   *httptest.Server
+    replies  []string
+    requests []string
+}
+
+func newAssistantSite(t *testing.T, replies ...string) (*testSite, *fakeProvider) {
+    t.Helper()
+    provider := &fakeProvider{replies: replies}
+    provider.server = httptest.NewTLSServer(http.HandlerFunc(provider.serve))
+    t.Cleanup(provider.server.Close)
+    s := newTestSiteWith(t, provider.server.Client())
+    config := s.database.Configuration()
+    for i := range config.AIProviders {
+        config.AIProviders[i].BaseURL = provider.server.URL + "/v1"
+    }
+    if err := s.database.SaveConfiguration(config.Revision, config); err != nil {
+        t.Fatal(err)
+    }
+    return s, provider
+}
+
+func (p *fakeProvider) serve(w http.ResponseWriter, r *http.Request) {
+    p.mu.Lock()
+    defer p.mu.Unlock()
+    var body bytes.Buffer
+    body.ReadFrom(r.Body)
+    p.requests = append(p.requests, r.URL.Path + " " + r.Header.Get("Authorization") + " " + body.String())
+    if len(p.replies) == 0 {
+        w.WriteHeader(http.StatusServiceUnavailable)
+        return
+    }
+    w.Header().Set("Content-Type", "application/json")
+    io.WriteString(w, p.replies[0])
+    p.replies = p.replies[1:]
+}
+
+func (p *fakeProvider) seen() []string {
+    p.mu.Lock()
+    defer p.mu.Unlock()
+    return slices.Clone(p.requests)
+}
+
+func openAIText(text string) string {
+    content, _ := json.Marshal(text)
+    return `{"model":"fake-model","choices":[{"message":{"content":` + string(content) + `}}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`
+}
+
+func openAICall(name string, arguments string) string {
+    encoded, _ := json.Marshal(arguments)
+    return `{"model":"fake-model","choices":[{"message":{"content":null,"tool_calls":[{"id":"call-` + name + `","type":"function","function":{"name":"` + name + `","arguments":` + string(encoded) + `}}]}}]}`
+}
+
+func (c *testClient) subscribe(model string, key string) {
+    c.site.t.Helper()
+    body := c.page("/dashboard/subscriptions")
+    status, location, page := c.post("/dashboard/subscriptions", url.Values{"csrf": {c.token(body)}, "action": {"subscription-add"}, "model": {model}, "key": {key}, "name": {""}})
+    if (status != http.StatusSeeOther) || (location != "/dashboard/subscriptions") {
+        c.site.t.Fatalf("subscribe: %d %s %s", status, location, page)
+    }
+}
+
+func (c *testClient) ask(conversation string, question string) string {
+    c.site.t.Helper()
+    body := c.page("/dashboard/assistant")
+    status, location, page := c.post("/dashboard/assistant", url.Values{"csrf": {c.token(body)}, "action": {"ask"}, "conversation": {conversation}, "question": {question}})
+    if (status != http.StatusSeeOther) || !strings.HasPrefix(location, "/dashboard/assistant/") {
+        c.site.t.Fatalf("ask: %d %s %s", status, location, page)
+    }
+    return location
 }
 
 func (j *testJournal) Write(data []byte) (int, error) {

@@ -44,6 +44,7 @@ type AdminController struct {
     random     io.Reader
     iterations int
     logger     *slog.Logger
+    downloads  Downloads
 }
 
 type accountsRecord struct {
@@ -76,8 +77,8 @@ type accountRecord struct {
 // AdminController implementation
 // ---------------------------------------------------------------------------
 
-func NewAdminController(repository Repository, sessions *Sessions, today *Today, renderer *Renderer, errors *ErrorPages, clock activity.Clock, random io.Reader, iterations int, logger *slog.Logger) *AdminController {
-    return &AdminController{repository: repository, sessions: sessions, today: today, renderer: renderer, errors: errors, clock: clock, random: random, iterations: iterations, logger: logger}
+func NewAdminController(repository Repository, sessions *Sessions, today *Today, renderer *Renderer, errors *ErrorPages, clock activity.Clock, random io.Reader, iterations int, logger *slog.Logger, downloads Downloads) *AdminController {
+    return &AdminController{repository: repository, sessions: sessions, today: today, renderer: renderer, errors: errors, clock: clock, random: random, iterations: iterations, logger: logger, downloads: downloads}
 }
 
 func (c *AdminController) record(viewer *Viewer, item account.Account) accountRecord {
@@ -260,6 +261,7 @@ func (c *AdminController) Update(w http.ResponseWriter, r *http.Request) {
                 return
             }
             c.sessions.CloseAccount(login, "")
+            c.downloads.RemoveAccount(login)
             c.logger.Info("account deleted", "login", string(login), "by", string(viewer.Login))
             c.renderer.Redirect(w, r, "/admin/accounts", "deleted")
         default:

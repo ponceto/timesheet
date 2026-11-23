@@ -83,6 +83,8 @@ func (e *ErrorPages) title(status int) string {
             return "Hôte inconnu"
         case http.StatusTooManyRequests:
             return "Trop de tentatives"
+        case http.StatusGone:
+            return "Lien expiré"
     }
     return "Erreur interne"
 }
@@ -99,6 +101,8 @@ func (e *ErrorPages) text(status int) string {
             return "Ce serveur ne répond pas pour ce nom d'hôte."
         case http.StatusTooManyRequests:
             return "Patientez quelques instants avant de réessayer."
+        case http.StatusGone:
+            return "Ce fichier n'est plus disponible : demandez un nouvel export à l'assistant."
     }
     return "Une erreur inattendue s'est produite. Réessayez plus tard."
 }

@@ -67,6 +67,10 @@ const (
     ExitUsage = 2
 
     ProgramName = "timesheet"
+
+    providerHandshake       = 10 * time.Second
+    providerIdleConnections = 16
+    providerIdleTimeout     = 90 * time.Second
 )
 
 // ---------------------------------------------------------------------------
@@ -183,8 +187,21 @@ func (a *Application) report(err error) int {
     return ExitError
 }
 
+func (a *Application) providerClient(settings activity.AssistantSettings) *http.Client {
+    transport := &http.Transport{Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, TLSHandshakeTimeout: providerHandshake, MaxIdleConns: providerIdleConnections, IdleConnTimeout: providerIdleTimeout}
+    return &http.Client{Timeout: settings.Timeout.Std(), Transport: transport, CheckRedirect: a.refuseRedirect}
+}
+
+func (a *Application) refuseRedirect(request *http.Request, via []*http.Request) error {
+    return http.ErrUseLastResponse
+}
+
 func (a *Application) serve(ctx context.Context, settings *Settings, server activity.ServerConfiguration, logger *slog.Logger) int {
     logger.Info("starting", "version", NewBuildInfo().String())
+    server, err := NewEnvironmentOverrides(a.lookupEnv).Apply(server)
+    if err != nil {
+        return a.fail(logger, "invalid environment variable", err)
+    }
     config := server.Server
     database := store.NewDatabase(settings.Database(), logger, server.Database.MaxBytes, server.Limits)
     if err := database.Lock(); err != nil {
@@ -247,7 +264,7 @@ func (a *Application) serve(ctx context.Context, settings *Settings, server acti
         listener.Close()
         return a.fail(logger, "cannot prepare " + sessions.Path(), err)
     }
-    site, err := web.NewSite(web.SiteDependencies{Repository: database, Sessions: sessions, Clock: a.clock, Random: a.random, Logger: logger, Origins: origins, Server: server, TrustedProxies: trusted, LocalPrefixes: prefixes, Iterations: a.passwordIterations(server), Version: NewBuildInfo().Version()})
+    site, err := web.NewSite(web.SiteDependencies{Repository: database, Sessions: sessions, Clock: a.clock, Random: a.random, Logger: logger, Origins: origins, Server: server, TrustedProxies: trusted, LocalPrefixes: prefixes, Iterations: a.passwordIterations(server), Version: NewBuildInfo().Version(), Client: a.providerClient(server.Assistant), Downloads: store.NewDownloadStore(settings.Database() + activity.DownloadsSuffix, logger)})
     if err != nil {
         listener.Close()
         return a.fail(logger, "cannot build the site", err)
@@ -282,6 +299,7 @@ func (a *Application) serve(ctx context.Context, settings *Settings, server acti
     if err := httpServer.Shutdown(shutdown); err != nil {
         httpServer.Close()
     }
+    site.Stop()
     site.Flush()
     logger.Info("stopped")
     return code

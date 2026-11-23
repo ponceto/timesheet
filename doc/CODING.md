@@ -180,7 +180,7 @@ In a file with a build constraint, `//go:build ...` is the very first line, foll
 | Style sheets (`.css`) and scripts (`.js`) of `internal/web` | the same `/* … */` block at the very top, followed by a blank line | `TestWebSourcesStartWithTheLicenceHeader`, file name included |
 | Templates (`.html`) of `internal/web` | the same block inside a template comment, `{{- /* … */ -}}`, on the first lines, which keeps it out of the pages sent | `TestWebSourcesStartWithTheLicenceHeader`, file name included |
 
-`debian/postinst` has section banners but no licence header; `debian/rules` and `.dockerignore` have neither.
+`debian/postinst` has section banners but no licence header; `debian/rules`, `.dockerignore` and the skill of the assistant, `src/internal/assistant/assistant.skill.md`, a prompt sent as is to the model, have neither.
 
 ### Indentation
 
@@ -243,7 +243,7 @@ Value types with behaviour (`Quantity`, `Date`, `Month`, `PeriodStart`) have une
 
 - A dependency is injected as an interface declared by its consumer (`web.Repository`).
 - An interface shared by several packages is declared by the domain (`activity.Clock`).
-- Concrete standard library types are accepted: `*slog.Logger`, `io.Reader`, `io.Writer`, `fs.FS`.
+- Concrete standard library types are accepted: `*slog.Logger`, `io.Reader`, `io.Writer`, `fs.FS`, `*http.Client`.
 
 ### Free functions, closures and package variables
 
@@ -251,7 +251,7 @@ Value types with behaviour (`Quantity`, `Date`, `Month`, `PeriodStart`) have une
 | --- | --- |
 | Free functions | `main`, the constructors `NewXxx`, the `TestXxx` functions, unexported helpers in `_test.go` files |
 | Closures | In tests, and as adapters that carry no logic |
-| Package-level variables | Sentinel errors `ErrXxx`, constants, interface assertions `var _ I = (*T)(nil)`, the `embed.FS` of `web` exposed by `NewEmbeddedAssets()` |
+| Package-level variables | Sentinel errors `ErrXxx`, constants, interface assertions `var _ I = (*T)(nil)`, the `embed.FS` of `web` exposed by `NewEmbeddedAssets()`, the embedded skill of `assistant` exposed by `NewSkill()` |
 
 - Sort with `slices.SortFunc(xs, r.compare)`, a method as the comparison.
 - Declare a command-line option that needs its own parsing with a `flag.Value` type (`OptionList`).
@@ -296,6 +296,9 @@ Name the code with these words; their meaning in the domain is in [SPECIFICATION
 | Summary | `activity.Summary`, `web.SummaryView` |
 | Adjustment | `activity.Adjustment` |
 | Workspace | `web.Workspace` |
+| Subscription | `assistant.Subscription`: an API key of an AI provider |
+| Conversation | `assistant.Conversation` |
+| Pending action | `assistant.PendingAction`, planned by `web.ActionPlanner` |
 
 ### Sentinel errors
 
@@ -355,8 +358,9 @@ The table of pages, routes and templates is in [ARCHITECTURE.md, Pages and the c
   4. `meta color-scheme`;
   5. `meta description`;
   6. `meta author`;
-  7. the icon;
-  8. the style sheets.
+  7. `meta http-equiv="refresh"`, only while `PageModel.Refresh` is set (a conversation waiting for its answer);
+  8. the icon;
+  9. the style sheets.
 - `body` holds directly `<header>`, `<main>` and `<footer>`, then the scripts.
 
 ### Semantic elements
@@ -458,6 +462,7 @@ Both static style sheets are hand-written.
 19. calendar
 20. facts
 21. accounts
+22. assistant (subscriptions, login suggestions, exchanges, question, answer, pending action, question form)
 
 The rules of a same subject follow each other, without any title comment: the selectors name what they style. A narrow-window rule of a subject placed after « responsive » stays in a media block at the end of that subject, since a later rule of the same specificity would override it.
 
@@ -554,6 +559,7 @@ The look is sober and professional:
 - Web tests start from `newTestSite(t)` of `src/internal/web/fixtures_test.go`: accounts `root` (`ADMIN`) and `demo` (`USER`) tracked from September 2026, clock at 2026-11-08 10:00 UTC; `client().login(name)`, `get`, `post`, `page` and `token` drive the pages.
 - `html/template` escapes an apostrophe inserted by an action (`{{.Label}}`, a notice) as `&#39;`, while the literal text of a template keeps it: a test that looks for an inserted text with an apostrophe uses the escaped form or another text.
 - Web tests use `httptest` and a database in `t.TempDir()`.
+- The assistant is tested without network: `newAssistantSite(t, replies...)` starts an `httptest` TLS server that answers the given OpenAI-format replies in order (`openAIText`, `openAICall`), points every provider of the configuration at it and gives its client to the site; `subscribe` and `ask` drive the profile and the assistant pages. The provider clients of `assistant` are tested the same way, one test per format.
 - Password hashing uses `account.MinIterations` in tests: `Application.WithIterations` and the field `Iterations` of `SiteDependencies` take precedence over `passwords.iterations`, whose floor is 600 000.
 - A test that opens a database always gives its path (`--database` or `store.NewDatabase`): no path has a default, and the configuration of the repository names `/var/lib/timesheet/timesheet-database.json`. Without `--config`, a command takes the default settings, which name no database; `newTestDirectory` also writes `timesheet.json` next to the database, naming it, for the tests that give `--config`.
 - `go vet` rejects non-constant format strings: always use a constant format.

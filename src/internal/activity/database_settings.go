@@ -34,6 +34,8 @@ type DatabaseSettings struct {
 const (
     LockSuffix      = ".lock"
     SessionsSuffix  = ".sessions"
+    KeySuffix       = ".key"
+    DownloadsSuffix = ".downloads"
     TemporarySuffix = ".tmp"
 
     minDatabaseBytes = 1 << 20
@@ -56,13 +58,13 @@ func ValidDatabasePath(path string) bool {
     if (name == ".") || (name == "..") {
         return false
     }
-    return !strings.HasSuffix(name, LockSuffix) && !strings.HasSuffix(name, SessionsSuffix) && !strings.HasSuffix(name, TemporarySuffix)
+    return !strings.HasSuffix(name, LockSuffix) && !strings.HasSuffix(name, SessionsSuffix) && !strings.HasSuffix(name, KeySuffix) && !strings.HasSuffix(name, DownloadsSuffix) && !strings.HasSuffix(name, TemporarySuffix)
 }
 
 func (s DatabaseSettings) Validate() error {
     check := NewSettingCheck("database")
     if (s.Path != "") && !ValidDatabasePath(string(s.Path)) {
-        return check.Fail("path", "a file, not . or .., whose name does not end with " + LockSuffix + ", " + SessionsSuffix + " or " + TemporarySuffix + " in any case is expected")
+        return check.Fail("path", "a file, not . or .., whose name does not end with " + LockSuffix + ", " + SessionsSuffix + ", " + KeySuffix + ", " + DownloadsSuffix + " or " + TemporarySuffix + " in any case is expected")
     }
     return check.Integer("max_bytes", s.MaxBytes, minDatabaseBytes, maxDatabaseBytes)
 }

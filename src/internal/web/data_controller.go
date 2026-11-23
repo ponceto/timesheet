@@ -41,6 +41,7 @@ type DataController struct {
     clock      activity.Clock
     random     io.Reader
     logger     *slog.Logger
+    downloads  Downloads
 }
 
 type dataRecord struct {
@@ -63,8 +64,8 @@ const (
 // DataController implementation
 // ---------------------------------------------------------------------------
 
-func NewDataController(loader *WorkspaceLoader, repository Repository, renderer *Renderer, errors *ErrorPages, clock activity.Clock, random io.Reader, logger *slog.Logger) *DataController {
-    return &DataController{loader: loader, repository: repository, renderer: renderer, errors: errors, months: NewMonthView(), clock: clock, random: random, logger: logger}
+func NewDataController(loader *WorkspaceLoader, repository Repository, renderer *Renderer, errors *ErrorPages, clock activity.Clock, random io.Reader, logger *slog.Logger, downloads Downloads) *DataController {
+    return &DataController{loader: loader, repository: repository, renderer: renderer, errors: errors, months: NewMonthView(), clock: clock, random: random, logger: logger, downloads: downloads}
 }
 
 func (c *DataController) Show(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +94,7 @@ func (c *DataController) Export(w http.ResponseWriter, r *http.Request) {
         c.errors.Status(w, r, http.StatusInternalServerError)
         return
     }
-    name := "timesheet-" + string(ws.Owner.Login) + "-" + ws.Today.String() + ".json"
+    name := ws.ExportName(ws.Today)
     w.Header().Set("Content-Type", "application/json; charset=utf-8")
     w.Header().Set("Content-Disposition", `attachment; filename="` + name + `"`)
     w.Header().Set("Cache-Control", "no-store")
@@ -187,6 +188,7 @@ func (c *DataController) Reset(w http.ResponseWriter, r *http.Request) {
     if !c.store(w, r, ws, c.repository.EraseCalendar(ws.Owner.Login, revision, ws.Today.Month().First())) {
         return
     }
+    c.downloads.RemoveAccount(ws.Owner.Login)
     c.logger.Info("data erased", "login", string(ws.Owner.Login))
     c.renderer.Redirect(w, r, dataPath, "erased")
 }

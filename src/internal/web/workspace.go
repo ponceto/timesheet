@@ -70,6 +70,10 @@ func (w *Workspace) FormPath(m activity.Month) string {
     return "/dashboard/" + PageActivity + "/" + m.Path()
 }
 
+func (w *Workspace) ExportName(d activity.Date) string {
+    return "timesheet-" + string(w.Owner.Login) + "-" + d.String() + ".json"
+}
+
 func (w *Workspace) YearPath(year int) string {
     return w.Base + "/year/" + strconv.Itoa(year)
 }

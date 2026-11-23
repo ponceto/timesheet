@@ -38,6 +38,7 @@ Every change of behaviour, screen, label, route, form field, computation rule, d
 - [PROFILE PAGE](#profile-page)
 - [SETTINGS PAGE](#settings-page)
 - [DATA PAGE](#data-page)
+- [AI ASSISTANT](#ai-assistant)
 - [ADMINISTRATION](#administration)
 - [COLOURS](#colours)
 - [ROUTES](#routes)
@@ -137,6 +138,7 @@ The number of extra days comes from the employment contract: the application doe
 | `TPC` | Code « Temps partiel complémentaire » and counter « Temps partiels complémentaires »: extra days off some employers grant to part-time employees, managed like `RTT`. The name is the template's, not a legal notion. |
 | `ABS` | Code « Absence » and counter « Absences »: an absence, its reason going into the comment. |
 | AA | The WCAG 2 contrast level of 4.5:1 for normal text. |
+| AI provider | A company whose language models the [AI assistant](#ai-assistant) can call: one row of `configuration.ai_providers`, with its API format and its address. |
 | account | The record of one person: login, name, profile, state, password hash and data. |
 | accrual | A credit given by the rule of a counter, every month or every year. |
 | adjustment | A signed quantity entered by an employee on a counter at a date, with a reason ([Adjustments](#adjustments)). Also the kind `adjustment` of ledger entries made by the rules. |
@@ -146,11 +148,13 @@ The number of extra days comes from the employment contract: the application doe
 | balance | The value of a counter: the sum of its entries. |
 | cancelled entry | A ledger entry that a reversal cancels. |
 | carry over | Keeping the balance of a counter into the next period. |
+| confirmation | The choice of the user, « Confirmer » or « Annuler », that applies or drops a pending action of the assistant. |
 | configuration | The section of the database holding the default zone of public holidays, the activity codes and the counters. |
 | configuration page | The page `/admin/settings` that edits the configuration. |
 | configuration template | The JSON file read by `init` to create the configuration ([Configuration template](#configuration-template)). |
 | connected | The access level of the routes reserved to a valid session of a `USER` or an `ADMIN`. |
 | consuming code | An activity code that debits its counter. |
+| conversation | The questions of a user to the assistant and its answers, kept on the account ([Conversations](#conversations)). |
 | counter | An account of days, kept like a bank account ([Counters](#counters)). |
 | day entry | What is entered for one day: a code for the morning, a code for the afternoon, a comment. |
 | default amount | The accrual amount of a counter in the configuration. |
@@ -173,6 +177,7 @@ The number of extra days comes from the employment contract: the application doe
 | operator | A person with shell access to the host that runs the service. |
 | options | The `--name=value` arguments of the command line. |
 | over | A month is over when today is after its last day. |
+| pending action | A write proposed by the assistant, shown to the user and applied only after their confirmation ([Actions to confirm](#actions-to-confirm)). |
 | own amount | The accrual amount an employee sets for a counter in the settings page. |
 | period | The year of a counter, from its period start to the day before the next one. |
 | period start | The first day of the period of a counter, `MM-DD`. |
@@ -187,8 +192,11 @@ The number of extra days comes from the employment contract: the application doe
 | rounding | The adjustment that rounds a carried balance up to the next whole day. |
 | server page | The page `/admin/` that shows the name, version and licence of the software, then the server configuration read-only ([Server page](#server-page)). |
 | server configuration | The file given by `--config`, `etc/timesheet/timesheet.json` in the repository (`/etc/timesheet/timesheet.json` in the packages), holding the settings of the server and of its operation: address, origins, database path, timeouts, sessions, login throttle, password hashing and capacity ([Server configuration](#server-configuration)). |
+| skill | The Markdown text embedded in the program that tells the assistant what the application is and how to answer ([Agent and skill](#agent-and-skill)). |
 | statement | The table of the entries of one counter for one month, with opening and closing balances. |
+| subscription | An API key of an AI provider with a model, owned by one account and possibly shared with others ([Subscriptions](#subscriptions)). |
 | summary | The yearly table of the movements of every counter ([Yearly summary](#yearly-summary)). |
+| tool | A function of the application that the assistant may call to read the data of the user or to propose a write ([Tools](#tools)). |
 | tile | One counter on the dashboard, an `<article>`. |
 | totals | The days of each activity code over a year or a month. |
 | tracking start | The first tracked day of an account, « Date de début » in the settings page. |
@@ -924,8 +932,11 @@ When the tracking started before the month, the number of tracked days is the nu
 | Month page | « \<Mois> \<année> » | `/dashboard/month/{year}/{month}` | connected | [Month page](#month-page) |
 | Year page | « Année \<année> » | `/dashboard/year/{year}` | connected | [Year page](#year-page) |
 | Profile page | « Mon profil » | `/dashboard/profile` | connected | [Profile page](#profile-page) |
+| Subscriptions page | « Mes souscriptions » | `/dashboard/subscriptions` | connected | [Subscriptions](#subscriptions) |
 | Settings page | « Réglages » | `/dashboard/settings` | connected | [Settings page](#settings-page) |
 | Data page | « Données » | `/dashboard/data` | connected | [Data page](#data-page) |
+| Assistant page | « Assistant » | `/dashboard/assistant` | connected | [AI assistant](#ai-assistant) |
+| Conversation page | « \<titre de la conversation> » | `/dashboard/assistant/{id}` | connected | [Conversations](#conversations) |
 | Server page | « Serveur » | `/admin/` | `ADMIN` | [Server page](#server-page) |
 | Accounts page | « Comptes » | `/admin/accounts` | `ADMIN` | [Accounts page](#accounts-page) |
 | Account page | « Compte \<login> » | `/admin/accounts/{login}` | `ADMIN` | [Account page](#account-page) |
@@ -956,11 +967,11 @@ When the tracking started before the month, the number of tracked days is the nu
 | Family | Pages | Entries | `aria-label` of the `<nav>` |
 | --- | --- | --- | --- |
 | public | home, login, logout, error pages for a guest | for a guest, a link to `/login` shown as an icon only, an arrow entering a door drawn in the text colour, with `title` and `aria-label` « Se connecter »; for a connected browser, a « Tableau de bord » button, preceded for an `ADMIN` by an « Administration » button; nothing on the login page | « Navigation principale » |
-| dashboard | dashboard, activity, month, year, profile, settings and data pages | for an `ADMIN`, « Administration », a link to `/admin/`; then « Tableau de bord », « Activité », « Mois », « Année » | « Navigation principale » |
+| dashboard | dashboard, activity, month, year, profile, subscriptions, settings, data and assistant pages | for an `ADMIN`, « Administration », a link to `/admin/`; then « Tableau de bord », « Activité », « Mois », « Année »; then « Assistant », a link to `/dashboard/assistant`, only while the account can use a [subscription](#subscriptions) | « Navigation principale » |
 | admin | server, accounts, account, configuration pages and read-only views | « Tableau de bord », a link to `/dashboard/`; then « Serveur », « Comptes », « Configuration » | « Navigation de l'administration » |
 
 - The current entry carries `aria-current="page"` and is highlighted.
-- Every entry of a menu is shown on every page of its family.
+- Every entry of a menu is shown on every page of its family, except « Assistant », shown only to an account that owns a subscription or has one shared with it and not hidden.
 
 #### Theme button
 
@@ -1010,9 +1021,10 @@ The panel is a `<nav aria-label="Compte">`, the same on every page of the dashbo
 
 1. the profile as its heading (`<p class="menu-heading">`): « Administrateur » or « Utilisateur »;
 2. « Mon profil »;
-3. « Mes réglages », which opens the settings page « Réglages »;
-4. « Mes données », which opens the data page « Données »;
-5. the form « Se déconnecter ».
+3. « Mes souscriptions », which opens the page of the AI subscriptions;
+4. « Mes réglages », which opens the settings page « Réglages »;
+5. « Mes données », which opens the data page « Données »;
+6. the form « Se déconnecter ».
 
 - The entry of the current page carries `aria-current="page"`.
 - « Administration » is not in the user menu: it is an entry of the header ([Navigation of each family](#navigation-of-each-family)).
@@ -1510,9 +1522,9 @@ The missing half-days and the validation are computed only when there is no prob
 - The section « Supprimer mes données » explains what is erased and asks « Retapez votre identifiant pour confirmer » (`confirm`); its button « Supprimer mes données » is red (class `danger`).
 - It posts to `POST /dashboard/data/reset`, on the account of the viewer only.
 - The confirmation must be the login exactly, case included.
-- It erases the whole tracking of the account: day entries, adjustments, history of the months, ledger entries (validated months included), settings (zone of public holidays, counters, own amounts, initial balances, colours).
+- It erases the whole tracking of the account: day entries, adjustments, history of the months, ledger entries (validated months included), settings (zone of public holidays, counters, own amounts, initial balances, colours), and the [conversations](#conversations) with the assistant.
 - The account starts again like a new one: tracking start on the first day of the current month in `server.timezone`, zone of public holidays, every counter and colour by default.
-- The identity, the name, the profile, the password and the sessions are kept.
+- The identity, the name, the profile, the password, the sessions and the [subscriptions](#subscriptions), with their shares, are kept.
 - It is the only operation that removes validated entries ([Invariants](#invariants)).
 - Success: 303 to `/dashboard/data`, notice `erased`.
 
@@ -1528,6 +1540,161 @@ The missing half-days and the validation are computed only when there is no prob
 | deletion: confirmation other than the login | 422 | « Retapez exactement votre identifiant pour confirmer la suppression de vos données. » |
 | the data changed since the page was shown, checked before the file and the confirmation | 409 | « Les données ont changé entre-temps (autre onglet ?). Rechargez la page avant de recommencer. » |
 | the account would grow beyond its [size limits](#size-of-an-account) | 413 | « Les données de ce compte atteignent la taille maximale autorisée. » |
+
+## AI ASSISTANT
+
+The assistant answers the questions of a user about their own data, in French, with an AI model of a provider chosen by the user, and proposes writes that the user confirms or cancels. It is enabled for an account as soon as the account can use a subscription with a key.
+
+### AI providers
+
+- The providers live in the configuration, `configuration.ai_providers`, seeded by `init` from the [configuration template](#configuration-template). The template suggests four:
+
+| `name` | Label | `format` | `base_url` | `default_model` | Suggested models |
+| --- | --- | --- | --- | --- | --- |
+| `mistral` | « Mistral » | `openai` | `https://api.mistral.ai/v1` | `mistral-small-latest` | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `magistral-medium-latest`, `open-mistral-nemo`, `codestral-latest` |
+| `anthropic` | « Anthropic (Claude) » | `anthropic` | `https://api.anthropic.com/v1` | `claude-sonnet-5-5` | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-sonnet-4-5`, `claude-haiku-4-5` |
+| `openai` | « OpenAI » | `openai` | `https://api.openai.com/v1` | `gpt-4o-mini` | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4o`, `gpt-4o-mini`, `o4-mini`, `o3` |
+| `google` | « Google Gemini » | `gemini` | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.5-flash` | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.0-flash` |
+
+- A configuration whose `ai_providers` is `null` or empty, such as a database created before the assistant, offers these four.
+- The format names the API: `openai` posts to `<base_url>/chat/completions` with `Authorization: Bearer <key>`; `anthropic` posts to `<base_url>/messages` with `x-api-key` and `anthropic-version: 2023-06-01`; `gemini` posts to `<base_url>/models/<model>:generateContent` with `x-goog-api-key`.
+- The server calls only the `base_url` of a provider of the configuration: an https URL without user, query, fragment or final slash. A user never types an address.
+- The configuration page shows the providers read-only ([Configuration page](#configuration-page)); they are changed in the database, the server stopped.
+
+### Subscriptions
+
+- A subscription is an API key of a provider with a model and a name, owned by one account. It is managed in the page « Mes souscriptions » (`/dashboard/subscriptions`, `h1` « Mes souscriptions »), the entry of the user menu just below « Mon profil »: the section « Souscriptions » lists those of the account, « Partagées avec moi » those shared with it, and « Ajouter une souscription » holds the form of a new one.
+- « Ajouter une souscription » asks for « Modèle », a list of the suggested models grouped by provider, « Autre modèle », which replaces the chosen model at the same provider, « Clef d'API » and « Nom ». Without a name, the subscription is named after the label of the provider and the model, cut at 60 characters.
+- The key is sealed with AES-256-GCM by the key of the [key file](#key-file) and never shown again, to anyone: the table lists the name, the provider, the model and the shares.
+- « Gérer » opens, for each subscription, the forms to change its name, model or key (an empty « Nouvelle clef d'API » keeps the key), to share it, to withdraw a share, to make it the default (« Utiliser par défaut ») and to delete it.
+- The first subscription of the list is the default one of a new conversation.
+- An account owns 20 subscriptions at most.
+- Its forms post to `/dashboard/subscriptions` with an `action` starting with `subscription-`.
+- Success: 303 to `/dashboard/subscriptions` with the notice `subscription`, `subscription-deleted`, `shared`, `unshared`, `subscription-hidden` or `subscription-shown`.
+
+### Sharing
+
+- The owner shares a subscription from « Gérer », field « Identifiant du compte », with another existing account, 50 accounts at most per subscription; « Retirer le partage avec \<login> » withdraws a share. An unknown login is refused.
+- With JavaScript, the field suggests the logins as they are typed, like a search: from 2 characters, 300 ms after the last key, the page asks `GET /dashboard/subscriptions/logins?q=<text>` and shows at most 10 logins of other enabled accounts that contain the text, in alphabetical order, as buttons that fill the field (arrows to move, Escape to close). The answer is a JSON array of logins only: no name, no profile. Without JavaScript, the login is typed whole. Every connected user can thus learn the logins of the other accounts ([SECURITY.md](SECURITY.md#ai-assistant)).
+- The account it is shared with sees it in the table « Souscriptions partagées avec moi », with its name, its owner, its provider and its model, never its key. It can use it in the assistant, and hide it (« Ne plus proposer ») or offer it again (« Proposer de nouveau »); it cannot change, share or delete it.
+- A subscription of a disabled owner cannot be used.
+- The conversations of a shared user stay on their own account: the owner never sees them.
+- Withdrawing a share, deleting the subscription or deleting the account of either side ends the use at once: the conversations that used it can be read, not continued.
+
+### Refusals of the subscriptions page
+
+| Case | Status | Message |
+| --- | --- | --- |
+| unknown `action` | 400 | page « Requête invalide » |
+| subscription unknown, or not owned by the account for a change | 404 | page « Page introuvable » |
+| model unknown, or « Autre modèle » not 1 to 100 printable characters without space | 422 | « Choisissez un fournisseur et un modèle de la liste, ou un autre modèle de 1 à 100 caractères imprimables sans espace. » |
+| subscription name over 60 characters or on several lines | 422 | « Le nom compte au plus 60 caractères, sur une ligne. » |
+| API key missing at the creation, over 512 characters or with a control character | 422 | « Indiquez la clef d'API : une ligne de 512 caractères au plus. » |
+| 20 subscriptions already | 422 | « Vous avez atteint le nombre maximal de souscriptions. » |
+| share with an unknown login, one's own login or a login that already has access | 422 | « Partage impossible : indiquez l'identifiant d'un autre compte existant, qui n'a pas déjà accès à cette souscription. » |
+| 50 shares already | 422 | « Cette souscription est déjà partagée avec le nombre maximal de comptes. » |
+| the subscriptions changed in the meantime | 409 | « Les données ont changé entre-temps (autre onglet ?). Rechargez la page avant de recommencer. » |
+
+### Conversations
+
+- The page `/dashboard/assistant` (`h1` « Assistant ») offers the form « Nouvelle conversation » when the account can use a subscription, with the list « Souscription » when it can use several, and the table of the conversations, the most recent first: « Conversation » (its title, a link to it), « Dernier échange » and « Actions », whose red button « Supprimer » deletes that conversation (`action=delete`, notice `conversation-deleted`); below it, the button « Supprimer toutes les conversations ». Without usable subscription, an alert points to « Mes souscriptions ».
+- The page `/dashboard/assistant/{id}` (`h1` the title of the conversation) lists the exchanges: each question with its time, then the answer, the model that gave it, or the reason of its failure. The form « Poursuivre » asks the next question with the same subscription; « Supprimer cette conversation » deletes it.
+- The title of a conversation is its first question on one line, cut at a word before 60 characters with « … ».
+- An account keeps `assistant.conversations` conversations, 50 by default, of `assistant.exchanges` exchanges, 20 by default: beyond, the oldest conversation, or the oldest exchange of the conversation, is dropped. When the account record would exceed `limits.account_bytes`, the oldest conversations are dropped too.
+- The conversation of another account is not found (404).
+
+### Questions and answers
+
+- A question is 1 to `assistant.question_bytes` bytes, 4000 by default, of text following the [free-text rule](#free-text-rule) on each line; line breaks are kept.
+- `action=ask` records the question, redirects (303) to the conversation and starts the answer in the background: the page reloads itself every 3 seconds (`<meta http-equiv="refresh">`) and shows « Réponse en cours de préparation… » until the answer arrives.
+- One answer at a time is prepared per account: a question asked meanwhile is refused (409).
+- The answer is the Markdown text of the model, its control characters removed and cut at 64 000 bytes.
+- An answer interrupted by a stop of the server shows « La réponse a été interrompue : posez la question à nouveau. »; a failure of the provider shows its reason ([Refusals of the assistant pages](#refusals-of-the-assistant-pages)), never the body of its answer.
+- Without JavaScript, the forms work as is; with it, Enter sends the question, Shift and Enter adds a line, and the button is disabled after sending.
+
+### Agent and skill
+
+- The system prompt is the skill, a Markdown file embedded in the program (`src/internal/assistant/assistant.skill.md`), followed by a context: today, the login and the name, the tracking start, the planning horizon and the activity codes. The skill describes the application, its vocabulary, the tools and how to answer: in French, with Markdown tables, without inventing a figure.
+- The history sent is the last `assistant.exchanges` exchanges of the conversation, questions and answers only.
+- The agent calls the model, runs the tools it asks for, and calls it again with their results, `assistant.max_rounds` times at most, 4 by default; a last call asks for an answer without tool.
+- Each call to the provider lasts `assistant.timeout` at most, 1 minute by default; it asks for `assistant.max_tokens` tokens at most, 4096 by default; the answer of the provider is read up to 4 MiB; a redirection is not followed.
+
+### Tools
+
+Every tool works on the account of the question, whatever its arguments; it reads the data of the moment of the call.
+
+| Tool | Arguments | Gives |
+| --- | --- | --- |
+| `read_balances` | none | the [positions](#counter-tiles) of the counters |
+| `read_month` | `month` (`YYYY-MM`) | state, editability, half-days and comments, adjustments, anomalies and indicators of the month |
+| `read_statement` | `counter`, `month` | the [statement](#counter-statements) of the counter for the month |
+| `read_year` | `year` | the yearly summary, month by month: debits, credits, adjustments and balances of each counter, working days, public holidays, missing days |
+| `read_configuration` | none | the activity codes, the counters and the zone of public holidays |
+| `read_settings` | none | the user settings and every adjustment with its identifier |
+| `propose_days` | `month`, `days` (`date`, `am`, `pm`, `comment`) | a proposal to enter, change or clear half-days of an open month |
+| `propose_validation` | `month` | a proposal to [validate](#validation) the month |
+| `propose_reopening` | `month`, `reason` | a proposal to [reopen](#reopening) the last validated month |
+| `propose_adjustment` | `date`, `counter`, `amount`, `reason` | a proposal of an [adjustment](#adjustments) |
+| `propose_adjustment_removal` | `id` | a proposal to delete an adjustment of an open month |
+| `export_data` | none | the [export](#export) of the account saved as a [temporary download](#temporary-downloads): its link, its file name and the time it expires |
+
+A result is JSON of 64 000 bytes at most. The tools never reach the profile, the password, the settings, the subscriptions or the administration.
+
+### Actions to confirm
+
+- A `propose_` tool writes nothing. It checks the change with the rules of the pages (editable month, [codes offered](#codes-offered-in-a-grid), conditions of a validation or a reopening, bounds of an adjustment); a refusal goes back to the model, which explains it.
+- An accepted proposal becomes the pending action of the conversation, with its summary in French and the revision of the account; a new proposal replaces it.
+- The page shows it in the section « Action à confirmer », with « Confirmer » and « Annuler ».
+- « Confirmer » (`action=confirm`) checks the revision, checks the change again on the current data and writes it like the page would: the event of the write is logged with `by=assistant`, the notice is that of the page (`saved`, `validated`, `reopened`, `adjusted` or `unadjusted`), and the conversation records « Je confirme l'action proposée. » with the outcome.
+- « Annuler » (`action=cancel`) drops it; the conversation records the cancellation; notice `cancelled`.
+- A validated month is never rewritten: a proposal on it is refused, and a confirmation after the data changed is refused (409).
+
+### Temporary downloads
+
+- `export_data` encodes the export of the account, the file of « Mes données » in the import format ([Export](#export)), and keeps it in the [directory of the downloads](#directory-of-the-downloads) under a random identifier of 32 hexadecimal characters.
+- Its link is `/dashboard/assistant/downloads/{id}`; the model gives it in its answer, where it is the only relative link kept.
+- The link works only for the connected account that asked for it: for any other account, as for an unknown identifier, it gives 404.
+- It answers the file as an attachment named `timesheet-<login>-<date>.json`, the date of its creation, with `Cache-Control: no-store`.
+- A file lives `assistant.download_ttl`, 30 minutes by default: after it, the link gives 410, page « Lien expiré », and the file is removed.
+- Every `assistant.download_sweep`, 5 minutes by default, and at the start of the server, a job removes the expired files and the temporary files left by an interrupted write.
+- An account keeps 20 files at most: a new one removes the oldest.
+- « Supprimer mes données » and the deletion of the account remove its files at once.
+
+### Rendering of the answers
+
+- The answer is parsed on the server into paragraphs, headings, lists, tables, code blocks, quotes and rules, with bold, italic, code and links inline; everything is escaped by the templates, and raw HTML is shown as text.
+- The headings start at `h4` under the `h3` of the exchange and never skip a level.
+- A table gets the caption « Tableau \<n> » and headers `th scope="col"`.
+- Only `http` and `https` links with a host are kept, with `rel="noopener noreferrer"`, and the links `/dashboard/assistant/downloads/<32 hexadecimal characters>` of the temporary downloads, with the attribute `download`; another link is shown as its text.
+
+### Refusals of the assistant pages
+
+| Case | Status | Message |
+| --- | --- | --- |
+| unknown `action` | 400 | page « Requête invalide » |
+| unknown conversation, or no pending action to confirm or cancel | 404 | page « Page introuvable » |
+| download unknown, malformed or of another account | 404 | page « Page introuvable » |
+| download older than `assistant.download_ttl` | 410 | page « Lien expiré », « Ce fichier n'est plus disponible : demandez un nouvel export à l'assistant. » |
+| empty question | 422 | « Écrivez une question. » |
+| question too long or with a forbidden character | 422 | « La question est trop longue ou contient des caractères non autorisés. » |
+| no usable subscription | 409 | « Aucune souscription IA utilisable : ajoutez-en une dans « Mes souscriptions ». » |
+| the subscription of the conversation is no longer usable | 409 | « La souscription de cette conversation n'est plus utilisable : elle a été supprimée, n'est plus partagée ou sa clef est illisible. » |
+| an answer is already being prepared | 409 | « Une réponse est déjà en cours de préparation : attendez-la avant de poser une autre question. » |
+| the conversations changed in the meantime | 409 | « Les données ont changé entre-temps (autre onglet ?). Rechargez la page avant de recommencer. » |
+| the data changed since the proposal | 409 | « L'action ne correspond plus à l'état de vos données : elle n'a pas été appliquée. Annulez-la et demandez une nouvelle proposition. » |
+| the proposal is now refused | 409 | « L'action n'a pas été appliquée : » and the refusal |
+| the account would exceed its size | 413 | « Les données de ce compte atteignent la taille maximale autorisée. » |
+
+Failures of the provider, shown in place of the answer:
+
+| Case | Message |
+| --- | --- |
+| status 401 or 403 | « Le fournisseur a refusé la clef d'API (statut \<n>) : vérifiez la souscription dans « Mes souscriptions ». » |
+| status 429 | « Le quota ou le débit autorisé par le fournisseur est dépassé (statut 429) : réessayez plus tard. » |
+| other status | « Le fournisseur a refusé la requête (statut \<n>) : vérifiez le modèle de la souscription. » |
+| `assistant.timeout` reached | « Le fournisseur n'a pas répondu à temps. » |
+| network error, unreadable answer | « Le fournisseur est injoignable ou sa réponse est illisible. » |
+| provider removed from the configuration | « Le fournisseur de cette souscription n'existe plus dans la configuration. » |
 
 ## ADMINISTRATION
 
@@ -1560,6 +1727,7 @@ No other page shows the version.
 | « Connexion » | « Validité du formulaire », « Premier délai », « Délai maximal », « Fenêtre du budget », « Nouvelles adresses par fenêtre », « Adresses suivies », « Oubli d'une adresse » |
 | « Mots de passe » | « Itérations PBKDF2 » |
 | « Limites » | « Comptes », « Taille d'un compte », « Ajustements par compte » |
+| « Assistant » | « Délai d'un appel au fournisseur », « Tours d'outils par question », « Jetons par réponse », « Conversations par compte », « Échanges par conversation », « Taille d'une question », « Durée d'un lien de téléchargement », « Nettoyage des téléchargements »; the values in effect, after the [environment variables](#environment-variables) |
 
 - A duration is shown with its French unit: `8 h`, `1 min`, `30 s`, `500 ms`, in the shortest form of the file. A size is shown in `Mio` or `Kio` when it is a whole number of them, otherwise in `octets`; the length of the address is always in `octets`.
 - A list (« Origines publiques », « Proxys de confiance ») shows one entry per line, each in its own `dd` under the same `dt`.
@@ -1686,6 +1854,7 @@ Route `/admin/settings`, entry « Configuration » of the administration navigat
 - The section « Jours fériés » comes first: one form « Calendrier des jours fériés » with the list « Calendrier par défaut » of the thirteen zones and the button « Enregistrer »; a change applies to the open months of the accounts that follow the default zone.
 - The section « Codes d'activité » holds one form per code, then the form « Nouveau code d'activité ».
 - The section « Compteurs » holds one form per counter, then the form « Nouveau compteur ».
+- The last section, « Fournisseurs d'IA », lists read-only the [AI providers](#ai-providers): label, format, address, default model and suggested models. No form changes them.
 - Each form works without JavaScript and carries an `action` and the configuration revision.
 - The legend of each form is the identifier, with « utilisé » or « archivé » when it applies.
 - The button « Supprimer » is shown only for a code or a counter that is not used.
@@ -1818,6 +1987,13 @@ The label of the code (grid) or its identifier (year calendar) is always written
 | `/dashboard/data/import` | POST | connected | checks or imports a file in the import format ([Data page](#data-page)) |
 | `/dashboard/data/reset` | POST | connected | erases the whole tracking of the account ([Deletion of the data](#deletion-of-the-data)) |
 | `/dashboard/profile` | POST | connected | `action=name` saves the name; `action=sessions` closes every session of the account; `action=password` changes the password; any other `action` gets 400 |
+| `/dashboard/subscriptions` | GET | connected | page « Mes souscriptions » ([Subscriptions](#subscriptions)) |
+| `/dashboard/subscriptions` | POST | connected | `action=subscription-add`, `subscription-edit`, `subscription-delete`, `subscription-default`, `subscription-share`, `subscription-unshare`, `subscription-hide` or `subscription-show`; any other `action` gets 400 |
+| `/dashboard/subscriptions/logins` | GET | connected | JSON array of at most 10 logins of other enabled accounts containing `q`, 2 to 32 characters; `[]` otherwise ([Sharing](#sharing)) |
+| `/dashboard/assistant` | GET | connected | [assistant page](#conversations): new conversation and list of the conversations |
+| `/dashboard/assistant` | POST | connected | `action=ask` asks a question, in the conversation `conversation` or in a new one; `action=confirm` or `cancel` applies or drops the pending action of `conversation`; `action=delete` deletes `conversation`; `action=delete-all` deletes every conversation; any other `action` gets 400 |
+| `/dashboard/assistant/{id}` | GET | connected | [conversation page](#conversations); 404 for a conversation of another account |
+| `/dashboard/assistant/downloads/{id}` | GET | connected | a [temporary download](#temporary-downloads) of the account; 404 for an unknown one or one of another account, 410 once expired |
 | `/dashboard/settings` | GET | connected | [settings page](#settings-page) |
 | `/dashboard/settings` | POST | connected | saves the user settings |
 | `/dashboard/colors.css` | GET | connected | [colour sheet](#colour-sheet) of the viewer |
@@ -1865,7 +2041,7 @@ The refusals below come in the order in which the server checks them: a request 
 | 14 | 404 | invalid year or month, unknown login under `/admin/accounts/` | page « Page introuvable » |
 | 15 | 409 | form of an account whose field `created` is missing or differs from the account | the account page or the accounts page again, with « Ce compte a été supprimé puis recréé entre-temps. Rechargez la page avant de recommencer. » |
 | 16 | 400 | unknown `action`, unreadable revision | page « Requête invalide » |
-| 17 | 409, 413, 422 | refusals of a page | the page again, with an alert: [activity page](#refusals-of-the-activity-page), [settings page](#refusals-of-the-settings-page), [profile page](#refusals-of-the-profile-page), [data page](#refusals-of-the-data-page), [accounts page](#refusals-of-the-accounts-page), [account page](#refusals-of-the-account-page), [configuration page](#refusals-of-the-configuration-page) |
+| 17 | 409, 413, 422 | refusals of a page | the page again, with an alert: [activity page](#refusals-of-the-activity-page), [settings page](#refusals-of-the-settings-page), [profile page](#refusals-of-the-profile-page), [subscriptions page](#refusals-of-the-subscriptions-page), [data page](#refusals-of-the-data-page), [assistant pages](#refusals-of-the-assistant-pages), [accounts page](#refusals-of-the-accounts-page), [account page](#refusals-of-the-account-page), [configuration page](#refusals-of-the-configuration-page) |
 | 18 | 500 | write error, the database file beyond `database.max_bytes` (64 MiB by default) included | page « Erreur interne » |
 
 Every error page offers « Revenir à l'accueil ». The answers of rows 2 to 18 carry the security headers ([SECURITY.md](SECURITY.md#pages)) and a line in the access log ([Logs](#logs)).
@@ -1907,6 +2083,15 @@ The code `change-password` is not kept: the profile page shows it as a warning, 
 | `configuration` | « La configuration a été enregistrée. » | a change of the configuration |
 | `imported` | « L'import a été enregistré. » | an import from the data page |
 | `erased` | « Vos données ont été supprimées : le suivi recommence au premier jour du mois. » | a deletion of the data from the data page |
+| `subscription` | « La souscription IA a été enregistrée. » | a subscription added, changed or made the default |
+| `subscription-deleted` | « La souscription IA a été supprimée. » | a subscription deleted |
+| `shared` | « La souscription IA a été partagée. » | a subscription shared |
+| `unshared` | « Le partage de la souscription IA a été retiré. » | a share withdrawn |
+| `subscription-hidden` | « La souscription partagée n'est plus proposée dans l'assistant. » | a shared subscription hidden |
+| `subscription-shown` | « La souscription partagée est de nouveau proposée dans l'assistant. » | a shared subscription offered again |
+| `cancelled` | « L'action proposée a été annulée : rien n'a été écrit. » | a pending action of the assistant cancelled |
+| `conversation-deleted` | « La conversation a été supprimée. » | a conversation deleted |
+| `conversations-deleted` | « Toutes les conversations ont été supprimées. » | every conversation deleted |
 | `change-password` | « Choisissez un nouveau mot de passe avant de continuer. » | any request of an account with a provisional password, `GET` included ([Provisional password](#provisional-password)) |
 
 ## FORM FIELDS
@@ -1970,6 +2155,29 @@ Every form posts `application/x-www-form-urlencoded` data, except the import of 
 | Password | `current` | « Mot de passe actuel », password, 256 characters | the current password |
 | Password | `password` | « Nouveau mot de passe », password, 12 to 256 characters | the new password |
 | Password | `confirm` | « Confirmation », password, 12 to 256 characters | the new password again |
+
+### Fields of the subscriptions page
+
+| Form | Field | Control | Content |
+| --- | --- | --- | --- |
+| Subscription | `action` | hidden | `subscription-add`, `subscription-edit`, `subscription-delete`, `subscription-default`, `subscription-share`, `subscription-unshare`, `subscription-hide` or `subscription-show` |
+| Subscription | `id` | hidden | the identifier of the subscription; `<owner>:<identifier>` for `subscription-hide` and `subscription-show` |
+| Subscription | `model` | « Modèle », list grouped by provider | `<provider>\|<model>` |
+| Subscription | `custom_model` | « Autre modèle », text, 100 characters | a model of the same provider, empty allowed |
+| Subscription | `key` | « Clef d'API » or « Nouvelle clef d'API », password, 512 characters | the key; empty keeps the key on a change |
+| Subscription | `name` | « Nom », text, 60 characters | the name, empty allowed |
+| Share | `login` | « Identifiant du compte », text, 32 characters, with the suggested logins below it when JavaScript runs | the login to share with or to withdraw |
+
+### Fields of the assistant pages
+
+| Form | Field | Control | Content |
+| --- | --- | --- | --- |
+| Question | `action` | hidden | `ask` |
+| Question | `question` | « Question », text area | the question, 1 to `assistant.question_bytes` bytes |
+| Question | `subscription` | « Souscription », list, only for a new conversation with several usable subscriptions | `<owner>:<identifier>`; absent, the first usable one |
+| Question, action, deletion | `conversation` | hidden | the identifier of the conversation; empty for a new one |
+| Action | `action` | buttons « Confirmer » and « Annuler » | `confirm` or `cancel` |
+| Deletion | `action` | hidden | `delete` or `delete-all` |
 
 ### Fields of the data page
 
@@ -2440,7 +2648,8 @@ The spreadsheet an employee converts, and the import file made from it, are pers
     "revision": 3,
     "public_holidays": "fr-metropole",
     "activities": [ { "id": "CP", "label": "Congé payé", "consumes": "CP", "feeds": null, "color": "#e01b24", "archived": false } ],
-    "counters": [ { "id": "CP", "label": "Congés payés", "short_label": "CP", "enabled_by_default": true, "accrual": { "every": "month", "amount": "2.08" }, "period_start": "06-01", "carry_over": true, "archived": false } ]
+    "counters": [ { "id": "CP", "label": "Congés payés", "short_label": "CP", "enabled_by_default": true, "accrual": { "every": "month", "amount": "2.08" }, "period_start": "06-01", "carry_over": true, "archived": false } ],
+    "ai_providers": [ { "name": "mistral", "label": "Mistral", "format": "openai", "base_url": "https://api.mistral.ai/v1", "default_model": "mistral-small-latest", "models": [ "mistral-large-latest", "mistral-small-latest" ] } ]
   },
   "accounts": [
     {
@@ -2457,13 +2666,19 @@ The spreadsheet an employee converts, and the import file made from it, are pers
       "days": { "2026-11-03": { "am": "TT", "pm": "TT", "comment": "Formation sécurité" }, "2026-11-04": { "am": "TT", "pm": null, "comment": null } },
       "adjustments": [ { "id": "9f2c…", "date": "2026-11-30", "counter": "CP", "amount": "1.5", "reason": "alignement bulletin de paie" } ],
       "months": { "2026-10": { "status": "validated", "validated_at": "…", "rules": { "ABS": "0", "CP": "2.08", "CSS": "0", "JF": "0", "TP": "0", "TPC": "7/12", "TT": "0", "WE": "0" }, "indicators": { "holidays": "0", "total": "22", "working_days": "22", "missing": "0", "upcoming": "0", "by_counter": { "CP": "4", "TP": "4", "TT": "14", "WE": "9" }, "by_code": { "CP": "4", "TP": "4", "TT": "14", "WE": "9" } }, "history": [ { "at": "…", "action": "validated", "reason": null } ] } },
-      "ledger": [ { "id": "a81f…", "month": "2026-10", "date": "2026-10-31", "counter": "CP", "kind": "credit", "amount": "2.08", "label": "Acquisition octobre 2026", "ref": null, "created": "…" } ]
+      "ledger": [ { "id": "a81f…", "month": "2026-10", "date": "2026-10-31", "counter": "CP", "kind": "credit", "amount": "2.08", "label": "Acquisition octobre 2026", "ref": null, "created": "…" } ],
+      "assistant": {
+        "revision": 4,
+        "subscriptions": [ { "id": "5d1e…", "name": "Mistral mistral-small-latest", "provider": "mistral", "model": "mistral-small-latest", "key": "<sealed, base64>", "shared_with": [ "mmartin" ], "created": "…" } ],
+        "hidden": [],
+        "conversations": [ { "id": "c07a…", "title": "Mon solde de congés ?", "subscription": { "owner": "jdupont", "id": "5d1e…" }, "updated": "…", "exchanges": [ { "question": "Mon solde de congés ?", "answer": "Il vous reste **12,50** jours.", "failure": "", "provider": "mistral", "model": "mistral-small-latest", "asked": "…", "answered": "…" } ], "pending": null } ]
+      }
     }
   ]
 }
 ```
 
-The configuration of the example is shortened to one code and one counter; `rules` holds the effective amount of each counter enabled for the account at the validation (here `RTT` is disabled).
+The configuration of the example is shortened to one code, one counter and one provider; `rules` holds the effective amount of each counter enabled for the account at the validation (here `RTT` is disabled).
 
 ### Conventions of the fields
 
@@ -2487,12 +2702,17 @@ The configuration of the example is shortened to one code and one counter; `rule
 | `validated_at`, `rules`, `indicators`, `history` of a month | the month was never validated |
 | `colors` of the settings | the account never changed a colour |
 | `public_holidays` of the settings | the account follows the default zone of the configuration |
+| `ai_providers` of the configuration | the database predates the assistant: the four providers of the template are offered |
+| `assistant` of an account | the account never used the assistant |
+| `pending` of a conversation | no action waits for a confirmation |
+| `answered` of an exchange | the answer is being prepared, or was interrupted by a stop of the server |
 
 - `public_holidays` of the configuration is the identifier of a [zone](#public-holidays); an older database without it, or with an empty one, follows `fr-metropole` ([Migration notes](#migration-notes)).
 - `state` is mandatory: `enabled` for an active account, `disabled` for a disabled one.
 - `profile` is `USER` or `ADMIN`.
 - `status` of a month is `open` or `validated`; the `action` of a month event is `validated` or `reopened`.
 - `kind` of a ledger entry is `debit`, `credit`, `adjustment` or `reversal`.
+- `key` of a subscription is the API key sealed with AES-256-GCM by the [key file](#key-file), bound to the owner and the identifier of the subscription, in base64; `failure` of an exchange is empty unless the answer failed.
 
 ### Schema version
 
@@ -2507,7 +2727,8 @@ The configuration of the example is shortened to one code and one counter; `rule
 | --- | --- | --- |
 | `revision` | every write | nothing: it counts the writes |
 | `configuration.revision` | every change of the configuration | the forms of the configuration page and of the settings page |
-| `accounts[].revision` | every write of one account: grid, settings, adjustments, validation, reopening, import; also a change of profile, state or password, from the web or the command line | the forms of that account |
+| `accounts[].revision` | every write of one account: grid, settings, adjustments, validation, reopening, import; also a change of profile, state or password, from the web or the command line | the forms of that account, and the pending actions of the assistant |
+| `accounts[].assistant.revision` | every change of the subscriptions, the hidden shares or the conversations of one account | the forms of the subscriptions and of the assistant pages |
 
 A write of another account never refuses one's own form.
 
@@ -2527,6 +2748,8 @@ The whole file is validated when it is loaded. An invalid database stops the pro
 | Reversals | each cancels one earlier entry that is not itself a reversal, of the same counter, month and date, with the opposite amount, at most once |
 | Months | status `open` or `validated`; history actions and reopening reasons; a validated month has its validation time and indicators; month rules name existing counters |
 | Consistency | validated months follow each other without gap from the month of the tracking start; every entry of a month that is not validated is a reversal or cancelled by one |
+| AI providers | 20 at most; unique names `[a-z0-9-]{1,16}`; a label; a known format; an https `base_url` without user, query, fragment or final slash; a default model and 30 suggested models at most, of 1 to 100 printable characters without space |
+| Assistant | 20 subscriptions at most, with unique identifiers, a name, a provider of the configuration, a model, a sealed key, a creation time, and 50 shares at most with other existing accounts; 100 hidden shares of other accounts at most; 200 conversations at most, with unique identifiers, a title, a subscription reference, an update time, 100 exchanges at most whose texts follow the free-text rule on each line, and a pending action of a known size |
 | Round trip | the file, encoded again, can be decoded again |
 
 ### Writing
@@ -2543,6 +2766,20 @@ The whole file is validated when it is loaded. An invalid database stops the pro
 - These checks apply to every command that takes the lock; `user list` checks the file only.
 - Leftover temporary files are removed only by the holder of the lock.
 - The threats these checks answer are in [SECURITY.md](SECURITY.md#files).
+
+### Key file
+
+- The file `<file name>.key`, next to the database, holds the key that seals the API keys of the subscriptions: 32 random bytes in base64, on one line.
+- It is created, mode 0600 and atomically, at the first subscription saved, and never rewritten; it follows the checks of the database file.
+- Without it, or with another one, the keys cannot be opened: the subscriptions must be given their key again. Back it up with the database, and keep the two copies apart when a stolen backup of the database alone must not reveal the keys.
+- A database name cannot end with `.key`.
+
+### Directory of the downloads
+
+- The directory `<file name>.downloads`, next to the database, holds the [temporary downloads](#temporary-downloads) of the assistant, one file `<id>-<login>.json` each, mode 0600, written atomically.
+- It is created with mode 0700 at the first download; a directory that gives a right to the group or others is refused, and the download fails.
+- Its files never need a backup: they expire after `assistant.download_ttl`. It can be deleted, the server stopped.
+- A database name cannot end with `.downloads`.
 
 ### Lock
 
@@ -2627,6 +2864,16 @@ The settings of the server live in their own file, apart from the database. Its 
     "accounts": 200,
     "account_bytes": 1048576,
     "adjustments": 1000
+  },
+  "assistant": {
+    "timeout": "1m",
+    "max_rounds": 4,
+    "max_tokens": 4096,
+    "conversations": 50,
+    "exchanges": 20,
+    "question_bytes": 4000,
+    "download_ttl": "30m",
+    "download_sweep": "5m"
   }
 }
 ```
@@ -2721,6 +2968,21 @@ The existing hashes keep their own count; any count from 1 000 to 1 200 000 is a
 
 These limits apply only to a write that grows the database: a lowered limit never makes an existing database unreadable, it only refuses the next account, or the next save that would grow an account beyond it.
 
+### Section assistant
+
+| Key | Format and bounds | Meaning | Default |
+| --- | --- | --- | --- |
+| `timeout` | duration, 5s to 5m | the longest call to an AI provider | `1m` |
+| `max_rounds` | 1 to 8 | the rounds of tools of one answer, before a last call without tool | `4` |
+| `max_tokens` | 256 to 32 000 | the tokens asked for each call | `4096` |
+| `conversations` | 1 to 200 | the conversations kept per account, the oldest dropped | `50` |
+| `exchanges` | 1 to 100 | the exchanges kept per conversation, and sent to the model as history | `20` |
+| `question_bytes` | 100 to 16 000 | the size of one question | `4000` |
+| `download_ttl` | duration, 1m to 24h | the life of a [temporary download](#temporary-downloads); `TIMESHEET_ASSISTANT_DOWNLOAD_TTL` replaces it | `30m` |
+| `download_sweep` | duration, 10s to 1h | the period of the job that removes the expired downloads; `TIMESHEET_ASSISTANT_DOWNLOAD_SWEEP` replaces it | `5m` |
+
+A lowered `conversations` or `exchanges` applies at the next question of a conversation; the conversations already kept stay readable.
+
 ### Reading
 
 - Every command given `--config` reads the file first, except `help` and `version`: `run`, `init`, `user`, `session clear` and `import` before opening the database, `config show` and `config set` to print or change it. Without `--config`, they take the defaults.
@@ -2741,6 +3003,20 @@ These limits apply only to a write that grows the database: a lowered limit neve
 - `--log-level` replaces `server.log_level` for `run`.
 - Without option, the file applies; without file, the defaults, the database coming from `--database`.
 - A change applies at the next start of the server, or at the next command.
+
+### Environment variables
+
+`run` reads two environment variables after the file, which replace its keys:
+
+| Variable | Replaces | Default of the key |
+| --- | --- | --- |
+| `TIMESHEET_ASSISTANT_DOWNLOAD_TTL` | `assistant.download_ttl` | `30m` |
+| `TIMESHEET_ASSISTANT_DOWNLOAD_SWEEP` | `assistant.download_sweep` | `5m` |
+
+- A variable that is absent or empty leaves the key of the file, or its default.
+- A value is read like the key and checked with its bounds: a malformed or out-of-bounds value stops `run` (exit 1) with `invalid environment variable` and the path of the key, for instance `assistant.download_ttl: a duration such as 500ms, 30s, 5m or 8h is expected`.
+- The server page shows the values in effect; `config show` shows the file, without the variables.
+- The other commands do not read them.
 
 ### Editing
 
@@ -2859,8 +3135,8 @@ The paths lost their defaults, and the files written next to the database lost t
 | `init` read `share/timesheet/database-template.json` by default | `init` requires `--template` |
 | `database.path` defaulted to `/var/lib/timesheet/timesheet-database.json` | `database.path` has no default: the database comes from `--database` or from `database.path`, and a command that opens it without either is refused |
 | a missing server configuration gave the defaults | a file given by `--config` and missing is an error, except for `config set`, which creates it without database |
-| `.<name>.lock`, `.<name>.sessions`, `.<name>.<digits>.tmp` | `<name>.lock`, `<name>.sessions`, `<name>.<digits>.tmp` |
-| a database name could not start with a dot | a database name cannot end with `.lock`, `.sessions` or `.tmp` |
+| `.<name>.lock`, `.<name>.sessions`, `.<name>.<digits>.tmp` | `<name>.lock`, `<name>.sessions`, `<name>.<digits>.tmp`, and since the assistant `<name>.key` |
+| a database name could not start with a dot | a database name cannot end with `.lock`, `.sessions`, `.key`, `.downloads` or `.tmp` |
 
 - A script or a unit that opens the database without `--database`, with a configuration that names none or without `--config`, fails with `timesheet: <command>: no database: give --database or set database.path in --config` (exit 2): add `--database`, or `database.path` with `config set database.path <file>`. The unit of the packages gives `--config`, and the file shipped in the repository and in the packages names the database.
 - The former session file `.<name>.sessions` is no longer read: its users log in again. Stop the server, then delete it, with the former lock `.<name>.lock`; the session file holds the CSRF tokens of its sessions.
@@ -2873,6 +3149,16 @@ The table of the login throttle got a lower maximum, the cookies a prefix under 
 - A server configuration with `login.tracked_addresses` above 65 536 is refused with `login.tracked_addresses: an integer from 16 to 65536 is expected` (exit 1): edit the key in the file by hand, 65536 at most; `config show` and `config set` refuse the file until then.
 - The volume of the server configuration of a container created by an earlier image keeps that configuration, which trusts the RFC 1918 ranges: run `config set server.trusted_proxies ''` in the container, then restart it ([OPERATIONS.md, Container](OPERATIONS.md#back-up-and-upgrade-the-container)).
 - With https origins, the cookies are named `__Host-ts_session` and `__Host-ts_login`: the sessions opened before the upgrade are no longer recognised, and their users log in again. The former cookies expire with the browser session.
+
+### AI assistant
+
+The assistant added `ai_providers` to the configuration and to the configuration template, `assistant` to each account, the key file `<name>.key` and the section `assistant` of the server configuration, without raising the schema `version`, which is still 1.
+
+- Nothing to do: a database without `ai_providers` offers the four providers of the template, and an account without `assistant` has no subscription. At the next write, the configuration gets `"ai_providers": null` and each account `"assistant": null`. A server configuration without the section `assistant` takes its defaults.
+- An older binary refuses a database written since, with `json: unknown field "ai_providers"` or `"assistant"`, and a server configuration with the section `assistant`, with `json: unknown field "assistant"`: restore the backup taken before the upgrade, or delete the keys by hand.
+- A database that already ends with `.key` or `.downloads` must be renamed.
+- The keys `assistant.download_ttl` and `assistant.download_sweep` and the directory `<name>.downloads` came with the temporary downloads: a server configuration without them takes their defaults.
+- The assistant calls the providers over https: open the outbound flows to their addresses, or set `HTTPS_PROXY`.
 
 ### Rule for future changes
 
@@ -2953,12 +3239,23 @@ time=2026-11-13T16:40:12.345+01:00 level=INFO msg=request client=203.0.113.9 pee
 | `sessions closed` | INFO | `login`, `by` | the sessions of an account closed from the administration |
 | `account deleted` | INFO | `login`, `by` | an account deleted from the web |
 | `configuration changed` | INFO | `action`, `by` | a change of the configuration |
-| `cannot save the name`, `cannot save the calendar`, `cannot save the settings`, `cannot save the configuration`, `cannot export the data`, `cannot import the data` | ERROR | `error` | a write failed (500) |
+| `key file created` | INFO | `file` | the first subscription created the [key file](#key-file) |
+| `subscriptions changed` | INFO | `login`, `change` (the notice code) | a subscription added, changed, deleted, made the default, shared, unshared, hidden or shown |
+| `assistant asked` | INFO | `login` | a question to the assistant |
+| `assistant answered` | INFO | `login`, `provider`, `model`, `input_tokens`, `output_tokens`, `proposal` | an answer of the assistant; `proposal` tells whether it proposed an action |
+| `assistant failed` | WARN | `login`, `provider`, `model`, `error` | a failure of the provider; `error` names the status or the network error, never the key nor the body of the answer |
+| `conversation deleted`, `conversations deleted` | INFO | `login` | one or every conversation deleted |
+| `data exported` | INFO | `login`, `by=assistant` | an export prepared by the tool `export_data` |
+| `assistant download` | INFO | `login` | a temporary download read |
+| `downloads removed` | INFO | `count` | the job removed expired downloads |
+| `invalid environment variable` | ERROR | `error` | `run` cannot start: a variable of [Environment variables](#environment-variables) is invalid; it exits with 1 |
+| `cannot save the download`, `cannot read the download` | ERROR | `error` | a temporary download could not be written or read |
+| `cannot save the name`, `cannot save the calendar`, `cannot save the settings`, `cannot save the configuration`, `cannot export the data`, `cannot import the data`, `cannot save the subscriptions`, `cannot save the conversations`, `cannot save the answer` | ERROR | `error` | a write failed (500), or the answer of the assistant could not be kept |
 | `handler panic` | ERROR | `path`, `panic` | a page failed unexpectedly (500) |
 | `template rendering failed` | ERROR | `error` | a page could not be rendered |
 | messages of the standard HTTP server | WARN, DEBUG for TLS handshake errors | | errors of connections |
 
-- `by` is the login of the administrator who acted.
+- `by` is the login of the administrator who acted; for `month saved`, `month validated`, `month reopened` and `adjustments changed`, `by=assistant` marks a pending action of the assistant confirmed by the user.
 - `address` is the key of the login throttle, not the address of the client: an IPv4 address as `/32`, a public IPv6 address as its `/64`, another IPv6 address as `/128`, and `::/128` for a request from a trusted proxy without a readable `X-Forwarded-For` ([SECURITY.md](SECURITY.md#login-throttling)).
 - A password change refused by the throttle (429) logs no event.
 - The commands of the command line log no event of their own.
@@ -2972,6 +3269,8 @@ time=2026-11-13T16:40:12.345+01:00 level=INFO msg=request client=203.0.113.9 pee
 - query strings;
 - request bodies;
 - the content of the days: codes, comments, reasons;
+- the API keys of the subscriptions;
+- the questions to the assistant, its answers and the data its tools read;
 - the `User-Agent` beyond its first 200 bytes.
 
 ## SECURITY REQUIREMENTS
@@ -2987,6 +3286,7 @@ The security model, its reasons and its accepted risks are owned by [SECURITY.md
 | Login | throttled per address and per login, with the delays of the [section login](#section-login) | [Login throttling](SECURITY.md#login-throttling) |
 | Pages | strict CSP with Trusted Types | [Pages](SECURITY.md#pages) |
 | Logs | no secret in the logs ([Never logged](#never-logged)) | [Logs](SECURITY.md#logs) |
+| AI assistant | API keys sealed by the [key file](#key-file) and never shown again; calls only to the addresses of the configuration, over https; tools bound to the account of the question; every write confirmed by the user | [AI assistant](SECURITY.md#ai-assistant) |
 
 ## LIMITS
 
@@ -3028,6 +3328,17 @@ The column « Setting » names the key of the [server configuration](#server-con
 | Planning horizon | 24 months after the current one | fixed | 409 | [Supported years and planning horizon](#supported-years-and-planning-horizon) |
 | Years | 2000 to 2099 | fixed | 404 | [Supported years and planning horizon](#supported-years-and-planning-horizon) |
 | `User-Agent` in the access log | 200 bytes | fixed | cut | [Access log](#access-log) |
+| Call to an AI provider | 1 min, 4 MiB of answer | `assistant.timeout`; 4 MiB fixed | the answer fails | [Agent and skill](#agent-and-skill) |
+| Rounds of tools | 4, then a last call | `assistant.max_rounds` | the model answers without tool | [Agent and skill](#agent-and-skill) |
+| Tokens of one call | 4096 | `assistant.max_tokens` | the answer is cut by the provider | [Agent and skill](#agent-and-skill) |
+| Conversations, exchanges | 50 per account, 20 per conversation | `assistant.conversations`, `assistant.exchanges` | the oldest is dropped | [Conversations](#conversations) |
+| Question | 4000 bytes | `assistant.question_bytes` | 422 | [Questions and answers](#questions-and-answers) |
+| Answer | 64 000 bytes | fixed | cut | [Questions and answers](#questions-and-answers) |
+| Answers in preparation | one per account | fixed | 409 | [Questions and answers](#questions-and-answers) |
+| Temporary download | 30 min, removed every 5 min, 20 per account, 16 MiB | `assistant.download_ttl`, `assistant.download_sweep`, or their environment variables; 20 and 16 MiB fixed | 410, then removed; the oldest removed | [Temporary downloads](#temporary-downloads) |
+| Subscriptions, shares | 20 per account, 50 per subscription | fixed | 422 | [Subscriptions](#subscriptions) |
+| API key | 512 characters | fixed | 422 | [Subscriptions](#subscriptions) |
+| AI providers | 20, 30 models each | fixed | the database is refused at load | [Validation at load](#validation-at-load) |
 
 ## NON-FUNCTIONAL REQUIREMENTS
 
@@ -3051,6 +3362,8 @@ The column « Setting » names the key of the [server configuration](#server-con
 - Reopening a month other than the last validated one.
 - Changing the login of an account.
 - Automatic backup.
+- Editing the AI providers in the pages, or a provider at an address typed by a user.
+- An answer of the assistant streamed as it is written, or a write of the assistant without the confirmation of the user.
 
 ## SIMPLIFICATIONS
 
@@ -3089,11 +3402,16 @@ These are choices of the application. Each one gives the way to reach the expect
 | Sessions: login, creation and last activity | [session file](#session-file) | the operator | the session closes or expires | logout, `session clear` |
 | Access log: client and proxy addresses, login, path, user agent, time | logs on the standard error | the operator | as long as the service manager or the file that collects them keeps them | outside the application |
 | Events: logins, failed and throttled logins with their address key, account events with the administrator, configuration changes, saves, validations, reopenings, changes of adjustments, settings and names, with their login | logs | the operator | same | outside the application |
+| Subscriptions: name, provider, model, sealed API key, shares | database; the key file next to it | the owner, without the key; the accounts it is shared with, without the key; the operator, who can open the keys with the key file | the subscription or the account is deleted | the owner deletes the subscription; deletion of the account |
+| Conversations: questions, answers, pending actions | database | the person; the operator | the oldest beyond `assistant.conversations` and `assistant.exchanges` are dropped; the account is deleted | deletion of one or every conversation; deletion of the data; deletion of the account |
+| Temporary downloads: the export of the account, with the comments of its days | directory `<name>.downloads` | the person, through its link; the operator | `assistant.download_ttl`, 30 minutes by default, then the job removes it | expiry; deletion of the data; deletion of the account |
+| Questions, the context of the account and the data read by the tools: days, comments, balances, adjustments | the AI provider of the subscription | the provider, under its own terms | as the provider keeps them | outside the application |
 | Backups of the database | wherever the operator keeps them | whoever holds them | as long as they are kept | outside the application |
 | Import files and the spreadsheets they come from | outside the application | whoever holds them | as long as they are kept | outside the application |
 | Files downloaded from the data page « Données »: settings, days with their comments, adjustments with their reasons | the computer of the person | the person, and whoever reaches that computer | as long as they are kept | outside the application |
 
-- The database and the backups are not encrypted.
+- The database and the backups are not encrypted, except the API keys, sealed by the key file.
+- A question to the assistant sends personal data to the provider chosen by the user, comments of `ABS` days included when the tools read them: the page « Mes souscriptions » says it next to the form of a subscription.
 - The reads of an `ADMIN` on another account appear in the access log, with the administrator and the page read.
 - The logs never hold the content of a day ([Never logged](#never-logged)). The commands of the command line log no event.
 - Deleting an account purges neither the backups nor the logs. Restoring a backup brings back the accounts deleted since, which must then be deleted again.

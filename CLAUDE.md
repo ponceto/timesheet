@@ -55,7 +55,7 @@ bin/timesheet run --listen=127.0.0.1:9000 --config=<tmp>/timesheet.json
 
 ## DOCUMENTATION
 
-- [doc/SPECIFICATIONS.md](doc/SPECIFICATIONS.md): what the application does ([routes](doc/SPECIFICATIONS.md#routes), [database](doc/SPECIFICATIONS.md#database), [limits](doc/SPECIFICATIONS.md#limits)); read it before changing any behaviour or text.
+- [doc/SPECIFICATIONS.md](doc/SPECIFICATIONS.md): what the application does ([routes](doc/SPECIFICATIONS.md#routes), [database](doc/SPECIFICATIONS.md#database), [limits](doc/SPECIFICATIONS.md#limits), [AI assistant](doc/SPECIFICATIONS.md#ai-assistant)); read it before changing any behaviour or text. The skill of the assistant is `src/internal/assistant/assistant.skill.md`: a change of the tools or of the domain updates it too.
 - [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md): packages, entities, pages and their code, [HTTP chain](doc/ARCHITECTURE.md#http-chain), flows, persistence.
 - [doc/CODING.md](doc/CODING.md): coding rules, [tests](doc/CODING.md#tests), [changing the schema](doc/CODING.md#changing-the-schema), packaging, documentation, commits.
 - [doc/SECURITY.md](doc/SECURITY.md): threat model, authorization, passwords, CSRF, sessions, logs.

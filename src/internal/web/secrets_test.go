@@ -29,7 +29,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestSecretsNeverReachTheJournal(t *testing.T) {
-    site := newTestSite(t)
+    site, _ := newAssistantSite(t, openAIText("secret answer of the model"))
     guest := site.client()
     _, _, body := guest.get("/login")
     token := guest.token(body)
@@ -37,8 +37,11 @@ func TestSecretsNeverReachTheJournal(t *testing.T) {
     site.clock.Advance(10 * time.Minute)
     user := site.client().login("demo")
     cookies := user.client.Jar.Cookies(&url.URL{Scheme: "http", Host: strings.TrimPrefix(site.server.URL, "http://")})
+    user.subscribe("openai|gpt-4o-mini", "sk-typed-secret-key")
+    user.ask("", "typed secret question")
+    site.logs.waitFor("assistant answered")
     journal := site.logs.waitFor("user=demo ")
-    secrets := []string{"typed-secret-login", "typed secret password", testPassword, token}
+    secrets := []string{"typed-secret-login", "typed secret password", testPassword, token, "sk-typed-secret-key", "typed secret question", "secret answer of the model"}
     for _, cookie := range cookies {
         secrets = append(secrets, cookie.Value)
     }
@@ -47,7 +50,7 @@ func TestSecretsNeverReachTheJournal(t *testing.T) {
             t.Errorf("the journal contains %q", secret)
         }
     }
-    if !strings.Contains(journal, "login failed") || !strings.Contains(journal, "login=demo") {
+    if !strings.Contains(journal, "login failed") || !strings.Contains(journal, "login=demo") || !strings.Contains(journal, "assistant answered") {
         t.Fatalf("expected login events in the journal:\n%s", journal)
     }
 }

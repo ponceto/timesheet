@@ -35,7 +35,7 @@ Delivery:
 - The application is a single statically linked Go binary, `bin/timesheet`.
 - It is built with the Go standard library only: there is no third-party code, Go or JavaScript.
 - The HTML templates and the static assets are embedded in the binary with `go:embed`.
-- There is no external service.
+- There is no external service, except the AI providers that the [assistant](SPECIFICATIONS.md#ai-assistant) calls over https when a user asks it a question.
 - The server speaks HTTP, or HTTPS (HTTP over TLS, Transport Layer Security) with a provided certificate pair.
 
 Data:
@@ -43,6 +43,7 @@ Data:
 - The activity codes, the counters, the accounts and the data of every account live in one JSON file, the database.
 - The server configuration lives in a second file.
 - The open sessions are saved in a third file, next to the database.
+- The key that seals the API keys of the AI subscriptions lives in a fourth file, `<database>.key`, next to the database.
 
 How the parts call each other:
 
@@ -62,18 +63,19 @@ src/
   cmd/timesheet/main.go           signal context, Application, os.Exit
   internal/activity/              domain (no HTTP, no I/O)
   internal/account/               logins, profiles, states, passwords, account record
-  internal/store/                 SecureFile, Database (single JSON file), SessionFile
+  internal/assistant/             AI assistant: subscriptions and conversations, provider clients, agent, skill, Markdown
+  internal/store/                 SecureFile, Database (single JSON file), KeyRing, SessionFile
   internal/web/                   HTTP adaptation
     templates/                    HTML templates: views and partials (embedded)
     static/                       css, js, img (embedded)
   internal/app/                   command line, commands, application lifecycle
 etc/timesheet/
-  timesheet.json                  server configuration: address, origins, database path, timeouts, sessions, login, limits
+  timesheet.json                  server configuration: address, origins, database path, timeouts, sessions, login, limits, assistant
 share/timesheet/
   database-template.json          configuration template read by init
   database-example.json           anonymized example database, account demo
   import-template.json            fictitious example of an import file
-var/lib/timesheet/                database of the repository, given with --database, its lock and the session file
+var/lib/timesheet/                database of the repository, given with --database, its lock, its key file, its downloads and the session file
 debian/                           Debian packaging
 rpm/                              RPM packaging: timesheet.spec
 bin/                              timesheet (built), timesheet.sh (runs the server on the files of the repository)
@@ -99,11 +101,13 @@ Dockerfile                        container image, with .dockerignore
 
 ```text
 cmd → app → {web, store, activity, account}
-store → {activity, account}
-web → {activity, account}
+store → {assistant, activity, account}
+web → {assistant, activity, account}
+assistant → {activity, account}
 ```
 
 - `activity` and `account` import nothing from the project.
+- `assistant` holds no HTTP route and no file: it calls the providers through the `http.Client` given to it.
 - `web` never imports `app` or `store`: it works on the `web.Repository` interface, implemented by `store.Database` and injected through `SiteDependencies`.
 - The tests of `web` use `store` to work on a real database.
 
@@ -113,8 +117,9 @@ web → {activity, account}
 | --- | --- | --- |
 | `internal/activity` | Domain: quantities, dates, configuration, calendar, public holidays, counter bookkeeping, month closing, indicators, summary, colours, clocks, import and export files | nothing |
 | `internal/account` | Logins, profiles, states, password policy and hashes, account record, session record, account errors | nothing |
-| `internal/store` | `SecureFile` (hardened private file, lock), `Database` (the single JSON database) and `SessionFile` (the saved sessions) | `activity`, `account` |
-| `internal/web` | HTTP adaptation: HTTP chain of guards, sessions, controllers, view builders, HTML templates, assets | `activity`, `account` (`store` in tests) |
+| `internal/assistant` | AI assistant: records of the subscriptions and conversations, clients of the provider formats, agent loop, tool port, embedded skill, Markdown parser | `activity`, `account` |
+| `internal/store` | `SecureFile` (hardened private file, lock), `Database` (the single JSON database), `KeyRing` (the key file that seals the API keys) and `SessionFile` (the saved sessions) | `assistant`, `activity`, `account` |
+| `internal/web` | HTTP adaptation: HTTP chain of guards, sessions, controllers, view builders, HTML templates, assets, tools of the assistant | `assistant`, `activity`, `account` (`store` in tests) |
 | `internal/app` | Command line, options, commands, application lifecycle | all |
 | `cmd/timesheet` | `main` | `app` |
 
@@ -169,10 +174,12 @@ The records of the database marshal through them: `DayEntry`, `ActivityCode`, `L
 | `AccrualPeriod` | value | Accrual period of a counter: month or year |
 | `Accrual` | record | Amount credited per month or per year |
 | `CounterRule` | record | Counter rule: accrual, period start, carry over (with rounding up) or zeroing of its single balance |
-| `Configuration` | record | Configuration section of the database (default zone of public holidays, codes, counters, revision), with `Validate` (which returns the path of the faulty field) and lookups. `NewDefaultConfiguration` mirrors `share/timesheet/database-template.json` |
+| `AIProvider` | record | AI provider of the configuration: name, label, format, https address, default and suggested models, with their checks |
+| `AIFormat` | value | API format of a provider: `openai`, `anthropic` or `gemini` |
+| `Configuration` | record | Configuration section of the database (default zone of public holidays, codes, counters, AI providers, revision), with `Validate` (which returns the path of the faulty field) and lookups. `NewDefaultConfiguration` mirrors `share/timesheet/database-template.json` |
 | `ServerConfiguration` | record | The whole server configuration file: its sections `ServerSettings`, `DatabaseSettings`, `SessionSettings`, `LoginSettings`, `PasswordSettings` and `LimitSettings`, their defaults (`NewDefaultServerConfiguration`, whose encoding is `etc/timesheet/timesheet.json`), the bounds checked by `Validate`, including the links between keys, and the access by key `section.key` (`Keys`, `Value`, `Set`) used by `config show` and `config set` |
 | `ServerSettings` | record | Section `server`: address, origins, trusted proxies, time zone, log level, TLS pair (`NullableText`, written `null` without a pair) and version, HSTS, timeouts and request sizes, with `Validate`, `Location` and `Level` |
-| `DatabaseSettings`, `SessionSettings`, `LoginSettings`, `PasswordSettings`, `LimitSettings` | record | Sections `database`, `sessions`, `login`, `passwords` and `limits`, each with its defaults and `Validate` |
+| `DatabaseSettings`, `SessionSettings`, `LoginSettings`, `PasswordSettings`, `LimitSettings`, `AssistantSettings` | record | Sections `database`, `sessions`, `login`, `passwords`, `limits` and `assistant`, each with its defaults and `Validate` |
 | `Duration` | value | Duration of the server configuration: read like `time.ParseDuration`, a whole number of milliseconds, written in its shortest form (`8h`, `1m`), shown in French (`8 h`, `1 min`) |
 | `SettingCheck` | service | Bound checks of the server configuration, with the path `section.key` in the error |
 | `TrustedProxies` | value | Addresses and prefixes of the proxies whose `X-Forwarded-For` header is believed, built from the list `server.trusted_proxies` |
@@ -268,13 +275,33 @@ It is shared by `app.ImportCommand` (database lock, options, English report) and
 | `Account` | record | Login, optional name of 60 characters at most, profile, state, hash, `must_change_password`, creation, last login. Its file holds the account errors `ErrUnknownAccount`, `ErrDuplicateLogin`, `ErrLastAdmin`, `ErrTooManyAccounts` and `ErrInvalidName` |
 | `SessionRecord` | record | Saved form of a session: SHA-256 of the identifier, login, CSRF (cross-site request forgery) token, creation, last activity |
 
+### internal/assistant
+
+| Entity | Kind | Role |
+| --- | --- | --- |
+| `State` | record | Assistant part of an account: revision, subscriptions, hidden shares, conversations, with `Validate` |
+| `Subscription` | record | API key (sealed), provider, model, name, shares, creation |
+| `SubscriptionRef`, `SharedSubscription` | record | Reference to the subscription of an owner; a subscription shared with an account, without its key |
+| `Conversation`, `Exchange`, `PendingAction` | record | A conversation, one question with its answer or failure, and the write proposed by the agent waiting for the confirmation |
+| `Role`, `Message`, `ToolCall`, `ToolSpec`, `Request`, `Reply` | record | The neutral form of a call to a model: history, tools, answer and token counts |
+| `Provider` | interface | One call to a model |
+| `Endpoint` | value | Format, address, model and key of a call; `Provider` picks the client of the format |
+| `OpenAIClient`, `AnthropicClient`, `GeminiClient` | service | The three API formats over a `ProviderTransport` |
+| `ProviderTransport` | service | JSON POST bounded to 4 MiB of answer; `ProviderError` keeps the status, never the body |
+| `Tool` | interface | A function the model may call, declared by the agent and implemented by `web` |
+| `Agent` | service | The loop: call the model, run its tools, call it again, at most `assistant.max_rounds` rounds and a last call |
+| `Skill` | service | The embedded `assistant.skill.md` |
+| `Markdown`, `Block`, `Inline` | service, record | Parses an answer into blocks rendered by the templates, without raw HTML |
+
 ### internal/store
 
 | Entity | Kind | Role |
 | --- | --- | --- |
 | `SecureFile` | service | Private file with hardened reading, atomic writes and an exclusive lock |
+| `KeyRing` | service | The key file `<name>.key`: created once with 32 random bytes, it seals and opens the API keys with AES-256-GCM, bound to their owner and subscription |
+| `DownloadStore` | service | The directory `<name>.downloads`: the temporary downloads `<id>-<login>.json` written through a `SecureFile`, at most 20 per account, opened only for their login, removed once expired or with their account; implements `web.Downloads` |
 | `DatabaseRecord` | record | JSON schema of the file: version, revision, configuration, accounts |
-| `AccountRecord` | record | One account of the file: `account.Account` and `activity.Calendar` flattened |
+| `AccountRecord` | record | One account of the file: `account.Account` and `activity.Calendar` flattened, then its `assistant.State` |
 | `SessionFile` | service | Saved sessions; implements `web.SessionArchive` |
 | `Database` | service | Owner of the database; implements `web.Repository` |
 
@@ -291,7 +318,7 @@ It is shared by `app.ImportCommand` (database lock, options, English report) and
 #### SessionFile
 
 - The file is named after the database: `<name>.sessions` next to `<name>`, so `timesheet-database.json.sessions` next to `timesheet-database.json`.
-- The lock follows the same pattern, `<name>.lock`; the suffixes are the constants `LockSuffix`, `SessionsSuffix` and `TemporarySuffix` of `activity`.
+- The lock follows the same pattern, `<name>.lock`, and so does the key file, `<name>.key`; the suffixes are the constants `LockSuffix`, `SessionsSuffix`, `KeySuffix` and `TemporarySuffix` of `activity`.
 - A database name never ends with one of these suffixes (`ValidDatabasePath`), so no companion file collides with another database.
 - It is read strictly and written atomically through a `SecureFile`.
 - The content of the file is described in [SECURITY.md, Sessions](SECURITY.md#sessions).
@@ -304,7 +331,8 @@ Operations:
 - `Lock` takes the lock, then removes the leftover temporary files.
 - `Load` decodes strictly, checks the version, checks that the record encodes and decodes again, and validates everything.
 - Reads return structural copies (`Calendar.Clone`, `Configuration.Clone`) that share nothing with the state.
-- The size of each account is capped (value in [SPECIFICATIONS.md, Limits](SPECIFICATIONS.md#limits)).
+- The size of each account is capped (value in [SPECIFICATIONS.md, Limits](SPECIFICATIONS.md#limits)); a save of the assistant drops the oldest conversations to stay within it.
+- `SaveAssistantState` checks the revision of the assistant of the account, seals the new keys, validates and writes; `SubscriptionKey` opens a key only for its owner or an account it is shared with.
 
 A write runs these steps under one `sync.RWMutex`:
 
@@ -321,7 +349,7 @@ A write runs these steps under one `sync.RWMutex`:
 | Entity | Kind | Role |
 | --- | --- | --- |
 | `Repository` | interface | Port to the database, implemented by `store.Database` |
-| `SiteDependencies` | record | Dependencies given to the site: repository, session archive, clock, random source, logger, origins, server configuration, trusted proxies, local prefixes, hash iterations, version (shown by the server page only) |
+| `SiteDependencies` | record | Dependencies given to the site: repository, session archive, clock, random source, logger, origins, server configuration, trusted proxies, local prefixes, hash iterations, version (shown by the server page only), HTTP client of the AI providers |
 | `Site` | service | Assembly of the routes and of the HTTP chain |
 
 #### Entities of the HTTP chain
@@ -391,6 +419,22 @@ A write runs these steps under one `sync.RWMutex`:
 | `LegendView` | Activity, month and year pages | Legend of the codes |
 | `OptionRecord` | Activity page | Option of a select: value, label, selected flag |
 
+#### Assistant
+
+| Entity | Kind | Role |
+| --- | --- | --- |
+| `AssistantRunner` | service | Prepares one answer at a time per account in the background, with the agent, and stores it; stopped with the server |
+| `ToolBox` | service | The tools of one question, bound to the workspace of its account: the read tools, the `propose_` tools and `export_data` |
+| `ToolExport` | service | The tool `export_data`: encodes the export of the account and saves it as a temporary download |
+| `Downloads` | interface | Port to the temporary downloads, implemented by `store.DownloadStore` |
+| `DownloadSweeper` | service | Removes the expired downloads at start and every `assistant.download_sweep`; stopped with the server |
+| `AssistantTool`, `ToolProposal` | service | Adapter from a method of `ToolBox` to `assistant.Tool`; the proposal of one write tool |
+| `ActionPlanner` | service | Checks a write proposed by the agent and builds the calendar it would save, at the proposal and again at the confirmation |
+| `ActionPlan` | record | Calendar, month, summary, notice and event of a planned write |
+| `MonthEditor` | service | The rules of the activity page shared with the planner: editable month, half-days, adjustments |
+| `SubscriptionChoice` | record | A subscription the viewer can use, with its label |
+| `SubscriptionOutcome` | record | Status, alert and notice of an action on the subscriptions |
+
 #### Controllers
 
 | Controller | Routes |
@@ -400,6 +444,8 @@ A write runs these steps under one `sync.RWMutex`:
 | `DashboardController` | `/dashboard/`, `/dashboard/activity…`, `/dashboard/month…`, `/dashboard/year/…`, `/dashboard/adjustments`, `/dashboard/colors.css`, and the read-only pages `/admin/accounts/{login}/dashboard`, `…/month/…`, `…/year/…` |
 | `SettingsController` | `/dashboard/settings` |
 | `ProfileController` | `/dashboard/profile` (name, password, sessions) |
+| `SubscriptionController` | `/dashboard/subscriptions` and its suggestions of logins `/dashboard/subscriptions/logins` |
+| `AssistantController` | `/dashboard/assistant`, `/dashboard/assistant/{id}`, `/dashboard/assistant/downloads/{id}` |
 | `DataController` | `/dashboard/data` and its routes `/dashboard/data/export`, `/dashboard/data/import`, `/dashboard/data/reset` |
 | `AdminServerController` | `/admin/` |
 | `AdminController` | `/admin/accounts`, `/admin/accounts/{login}` |
@@ -414,6 +460,7 @@ A write runs these steps under one `sync.RWMutex`:
 | `Usage` | service | Text of `timesheet help` |
 | `UsageError` | value | Error of usage of the command line |
 | `Application` | service | Dispatch of the commands and lifecycle of `run` (see [Lifecycle](#lifecycle)) |
+| `EnvironmentOverrides` | service | Replaces `assistant.download_ttl` and `assistant.download_sweep` by `TIMESHEET_ASSISTANT_DOWNLOAD_TTL` and `TIMESHEET_ASSISTANT_DOWNLOAD_SWEEP` at the start of `run`, then validates |
 | `ServerFile` | service | Server configuration file: strict bounded reading, an error when it is missing (`ErrMissingServerFile`, which `config set` turns into the defaults), validation, atomic rewriting by `config set`, which follows a symbolic link and keeps the mode, the owner and the group of the file (`server_file_unix.go`) |
 | `InitCommand` | service | `init` |
 | `ConfigCommand` | service | `config show`, `config set` |
@@ -446,7 +493,11 @@ The routes and their answers are specified in [SPECIFICATIONS.md, Routes](SPECIF
 | Year page (« Année ») | `/dashboard/year/{year}` | `DashboardController` | `YearView` | `year.html` | `chrome_page.js` |
 | Settings page (« Réglages ») | `/dashboard/settings` | `SettingsController` | none (the controller builds its record) | `settings.html` | `chrome_page.js` |
 | Profile page (« Mon profil ») | `/dashboard/profile` | `ProfileController` | none (the controller builds its record) | `profile.html` | `chrome_page.js` |
+| Subscriptions page (« Mes souscriptions ») | `/dashboard/subscriptions`, and the JSON of `/dashboard/subscriptions/logins` | `SubscriptionController` | none (the controller builds its record) | `subscriptions.html` | `chrome_page.js`, `subscriptions_page.js` |
 | Data page (« Données ») | `/dashboard/data`, `/dashboard/data/export`, `/dashboard/data/import`, `/dashboard/data/reset` | `DataController` | none (the controller builds its record) | `data.html` | `chrome_page.js` |
+| Assistant (« Assistant ») | `/dashboard/assistant` | `AssistantController` | none (the controller builds its record) | `assistant.html` | `chrome_page.js`, `assistant_page.js` |
+| Conversation | `/dashboard/assistant/{id}` | `AssistantController` | `assistant.Markdown` | `assistant_conversation.html` | `chrome_page.js`, `assistant_page.js` |
+| Temporary download | `/dashboard/assistant/downloads/{id}` | `AssistantController` | none | none (the export file, as an attachment) | none |
 | Colours of the codes | `/dashboard/colors.css` | `DashboardController` | none | none (generated style sheet) | none |
 | Server page (« Serveur ») | `/admin/` | `AdminServerController` | none (the controller builds its record from the version and the server configuration read at start) | `admin_server.html` | `chrome_page.js` |
 | Accounts (« Comptes ») | `/admin/accounts` | `AdminController` | none (the controller builds its records) | `admin_accounts.html` | `chrome_page.js` |
@@ -471,11 +522,13 @@ The rules for writing templates, scripts and style sheets are in [CODING.md, Tem
 
 ### Scripts
 
-Two ES modules are loaded with `<script type="module">`:
+Four ES modules are loaded with `<script type="module">`:
 
 | Script | Class | Loaded on | Behaviour |
 | --- | --- | --- | --- |
 | `chrome_page.js` | `ChromePage` | Every page | Shows the theme button; applies and switches the light or dark theme, kept in `localStorage` only; closes the burger menu, the user menu and the deletion box of `/admin/accounts` on a click outside or on `Échap`; gives the focus to the confirmation field of that box |
+| `assistant_page.js` | `AssistantPage` | Assistant and conversation pages | Sends the question on Enter, adds a line on Shift and Enter, disables the button once sent, scrolls to the last exchange |
+| `subscriptions_page.js` | `SubscriptionsPage` | Subscriptions page | Suggests, 300 ms after the last key from 2 characters, the logins of `/dashboard/subscriptions/logins` below the field of a share, as buttons built with the DOM API; arrows move between them, Escape closes them; uses `fetch`, allowed by `connect-src 'self'` |
 | `month_sheet_page.js` | `MonthSheetPage` | Activity page (editable grid) | Reads the code-to-class table of the `<script type="application/json">` block; copies the « Journée » choice into the selects of the half-days; empties « Journée » when a half-day is changed by hand; repaints the cells |
 
 ### Style sheets
@@ -567,6 +620,15 @@ The validation, the reopening and the adjustments compare the revision the same 
 2. The controller saves it like a month save, with the same revision check.
 3. Under its lock, `store.Database` refuses every `SaveCalendar` and `CheckCalendar` whose calendar does not keep the history of the stored one (`Calendar.KeepsHistoryOf`); the deletion of the data goes through `EraseCalendar`, which starts the account again from an empty calendar.
 
+### Question to the assistant
+
+1. `POST /dashboard/assistant` with `action=ask` reserves the account in `AssistantRunner`, stores the question with the assistant revision, and redirects to the conversation, which reloads itself every 3 seconds while the answer is prepared.
+2. In the background, the runner opens the key of the subscription (`SubscriptionKey`), loads the workspace of the account and builds a `ToolBox` and an `assistant.Agent` on the client of the format of the provider.
+3. The agent calls the model with the skill, the context of the account and the history, runs the tools it asks for, and returns the answer.
+4. A `propose_` tool asks `ActionPlanner` to check the write and keeps it as the pending action, with the revision of the account.
+5. The runner stores the answer, or the failure, and the pending action, retrying on a stale assistant revision.
+6. `action=confirm` plans the write again on the current calendar, refuses a revision that changed (409), saves it with `SaveCalendar` and logs its event with `by=assistant`.
+
 ### Page display
 
 1. `WorkspaceLoader` loads the account and the configuration.
@@ -583,6 +645,8 @@ The validation, the reopening and the adjustments compare the revision the same 
 | leaf lock of `Sessions` | The sessions in memory | One operation on the sessions, without the write of the session file |
 | write lock of `Sessions` | The session file and the number of the last state written | One write of the session file, which skips a state older than the last written |
 | leaf lock of `LoginThrottle` | The counters of failed logins | One operation on the throttle |
+| lock of `AssistantRunner` | The accounts whose answer is being prepared | One reservation or release; the answer itself runs outside it |
+| leaf lock of `KeyRing` | The key read from the key file | Its first read or creation |
 | leaf lock of `ManualClock` | The time of the test clock | One read or change |
 | leaf lock of `Application` | The listening address read by `Listen` | One read or change |
 
@@ -599,6 +663,8 @@ The file format, its mode, its directory rules, the atomic write, the lock and t
 - `store.SecureFile` checks the file and its directory and writes atomically.
 - `store.Database` validates the whole file at load and refuses a newer schema version.
 - `store.SessionFile` writes the sessions through its own `SecureFile`.
+- `store.KeyRing` writes the key file once, through its own `SecureFile`.
+- `store.DownloadStore` writes each temporary download through its own `SecureFile`, in `<name>.downloads`.
 
 ## CONFIGURATION AND SERVER CONFIGURATION
 
@@ -618,7 +684,7 @@ The content of the template is specified in [SPECIFICATIONS.md, Configuration te
 2. `Application` reads it with `ServerFile` before any command but `help`, `version` and the `config` commands, which read it themselves; without `--config`, it takes `NewDefaultServerConfiguration`, which names no database.
 3. `Settings.ResolveDatabase` takes the database path from `--database`, or else from `database.path`, refuses a command that has neither (usage error), and makes it absolute; `Application` then puts that path in the configuration it hands on.
 4. `Application` hands the configuration to the commands, which open the database with `store.NewDatabase(path, logger, database.max_bytes, limits)` and hash with `passwords.iterations`.
-5. `run` builds the `http.Server` from the section `server`, and gives the whole configuration to the web layer through `SiteDependencies.Server`: `NewSessions` takes the section `sessions`, `NewLoginThrottle` the section `login`, `NewRequestLimits` and `NewSecurityHeaders` the sizes and HSTS, the login controller the life of its form, the server page (`AdminServerController`) every value.
+5. `run` builds the `http.Server` from the section `server`, and the `http.Client` of the AI providers from the section `assistant` (timeout, proxy of the environment, no redirection), and gives the whole configuration to the web layer through `SiteDependencies.Server`: `NewSessions` takes the section `sessions`, `NewLoginThrottle` the section `login`, `NewRequestLimits` and `NewSecurityHeaders` the sizes and HSTS, the login controller the life of its form, the server page (`AdminServerController`) every value.
 6. The database never holds it.
 
 Its settings are specified in [SPECIFICATIONS.md, Server configuration](SPECIFICATIONS.md#server-configuration).
@@ -637,16 +703,17 @@ Its settings are specified in [SPECIFICATIONS.md, Server configuration](SPECIFIC
 1. Parse the options (`Settings`).
 2. Create the logger.
 3. Read the server configuration file, resolve the database path, and create the logger again at `server.log_level` when `--log-level` is not given.
-4. Lock, then load the database.
-5. Warn when no enabled administrator account exists.
-6. Open the listener.
-7. Compute the accepted origins.
-8. Load the TLS pair of the options or of the file, when one is given, after the check that the origins are https.
-9. Open the session file: check its directory, remove the leftover temporary files.
-10. Build the site with `web.NewSite`, which restores the saved sessions.
-11. Build the `http.Server` with the timeouts and the header size of the section `server`.
-12. Serve until the signal context ends.
-13. Shut down gracefully, within `server.shutdown_timeout`, then save the sessions (`Site.Flush`).
+4. Replace the keys of the downloads by the environment variables (`EnvironmentOverrides`), and stop with exit 1 on an invalid value.
+5. Lock, then load the database.
+6. Warn when no enabled administrator account exists.
+7. Open the listener.
+8. Compute the accepted origins.
+9. Load the TLS pair of the options or of the file, when one is given, after the check that the origins are https.
+10. Open the session file: check its directory, remove the leftover temporary files.
+11. Build the site with `web.NewSite`, which restores the saved sessions and starts the cleanup of the temporary downloads (`DownloadSweeper`).
+12. Build the `http.Server` with the timeouts and the header size of the section `server`.
+13. Serve until the signal context ends.
+14. Shut down gracefully, within `server.shutdown_timeout`, then cancel and wait for the answers of the assistant being prepared and stop the cleanup of the downloads (`Site.Stop`), and save the sessions (`Site.Flush`).
 
 ### Other commands
 

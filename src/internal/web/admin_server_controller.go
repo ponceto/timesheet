@@ -61,7 +61,7 @@ func (c *AdminServerController) Show(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *AdminServerController) groups() []serverGroupRecord {
-    server, database, sessions, login, limits := c.server.Server, c.server.Database, c.server.Sessions, c.server.Login, c.server.Limits
+    server, database, sessions, login, limits, assistant := c.server.Server, c.server.Database, c.server.Sessions, c.server.Login, c.server.Limits, c.server.Assistant
     return []serverGroupRecord{
         {Title: "Logiciel", Facts: []serverFactRecord{
             {"Nom", c.one("Timesheet")},
@@ -115,6 +115,16 @@ func (c *AdminServerController) groups() []serverGroupRecord {
             {"Comptes", c.one(strconv.FormatInt(limits.Accounts, 10))},
             {"Taille d'un compte", c.one(c.size(limits.AccountBytes))},
             {"Ajustements par compte", c.one(strconv.FormatInt(limits.Adjustments, 10))},
+        }},
+        {Title: "Assistant", Facts: []serverFactRecord{
+            {"Délai d'un appel au fournisseur", c.one(assistant.Timeout.Label())},
+            {"Tours d'outils par question", c.one(strconv.FormatInt(assistant.MaxRounds, 10))},
+            {"Jetons par réponse", c.one(strconv.FormatInt(assistant.MaxTokens, 10))},
+            {"Conversations par compte", c.one(strconv.FormatInt(assistant.Conversations, 10))},
+            {"Échanges par conversation", c.one(strconv.FormatInt(assistant.Exchanges, 10))},
+            {"Taille d'une question", c.one(c.size(assistant.QuestionBytes))},
+            {"Durée d'un lien de téléchargement", c.one(assistant.DownloadTTL.Label())},
+            {"Nettoyage des téléchargements", c.one(assistant.DownloadSweep.Label())},
         }},
     }
 }

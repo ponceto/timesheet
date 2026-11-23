@@ -75,6 +75,24 @@ func (n *Notices) Message(code string) string {
             return "La configuration a été enregistrée."
         case "change-password":
             return "Choisissez un nouveau mot de passe avant de continuer."
+        case "subscription":
+            return "La souscription IA a été enregistrée."
+        case "subscription-deleted":
+            return "La souscription IA a été supprimée."
+        case "shared":
+            return "La souscription IA a été partagée."
+        case "unshared":
+            return "Le partage de la souscription IA a été retiré."
+        case "subscription-hidden":
+            return "La souscription partagée n'est plus proposée dans l'assistant."
+        case "subscription-shown":
+            return "La souscription partagée est de nouveau proposée dans l'assistant."
+        case "cancelled":
+            return "L'action proposée a été annulée : rien n'a été écrit."
+        case "conversation-deleted":
+            return "La conversation a été supprimée."
+        case "conversations-deleted":
+            return "Toutes les conversations ont été supprimées."
     }
     return ""
 }

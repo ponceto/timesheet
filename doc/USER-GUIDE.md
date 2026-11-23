@@ -60,11 +60,13 @@ The public holidays are built in, for thirteen zones: « Métropole », « Alsac
 | « Mois » | Consultation only: the totals of the month, its calendar, its summary and the statement of each counter. |
 | « Année » | Consultation only: the totals of the year, the calendar, the summary of the calendar year and one section per counter. The summary is modelled on a spreadsheet: a carry-forward row « Report N-1 », one row per month and totals. |
 | « Mon profil » | Identity, name shown in the menu, password, open sessions. |
+| « Mes souscriptions » | Your AI subscriptions, those shared with you, and their shares with other accounts. Its menu entry is just below « Mon profil ». |
+| « Assistant » | Questions on your data to an AI model, with the answers in Markdown and tables, and the actions it proposes for your confirmation. The entry appears once you can use an AI subscription. |
 | « Réglages » | Tracking start, calendar of public holidays, counters enabled, own accrual amounts, initial balances, colours of the codes. Its menu entry is « Mes réglages ». |
 | « Données » | Import of a file, export of your data in the same format, deletion of your data to start the tracking again. Its menu entry is « Mes données ». |
 | « Administration » | For administrators: the software version and the server settings, read-only (« Serveur »), the accounts (« Comptes ») and the configuration of the default calendar of public holidays, the activity codes and the counters (« Configuration »). |
 
-- The menu under the user's name shows the profile and leads to « Mon profil », « Mes réglages » and « Mes données ». It also logs out (« Se déconnecter »).
+- The menu under the user's name shows the profile and leads to « Mon profil », « Mes souscriptions », « Mes réglages » and « Mes données ». It also logs out (« Se déconnecter »).
 - For an administrator, the header shows « Administration » left of « Tableau de bord ».
 - On the public pages, the arrow entering a door at the right of the header (« Se connecter » on hover) opens the login page « Connexion ».
 - The button of the header switches between the light and the dark theme. The choice is kept in the browser only.
@@ -242,13 +244,25 @@ An adjustment can be deleted while its month is open.
 
 The file is limited to 256 KiB by default; a larger file is imported by the operator, who has a shell on the server, with the command `import` ([Importing](OPERATIONS.md#importing)).
 
+### Use the assistant
+
+1. In « Mes souscriptions », in the menu under your name, form « Ajouter une souscription », choose a provider and a model in « Modèle » (or type another model of the same provider in « Autre modèle »), paste your API key in « Clef d'API », and click « Ajouter la souscription ». The key is encrypted and never shown again. The entry « Assistant » appears in the header.
+2. Open « Assistant », type your question in « Question » and press Enter (Shift and Enter adds a line). The page reloads itself until the answer arrives.
+3. The assistant reads your days, balances, statements and summary to answer. When it proposes a change, such as half-days to enter, a month to validate or an adjustment, the section « Action à confirmer » lists what would be written: « Confirmer » writes it, « Annuler » drops it. Nothing is written before you confirm.
+4. Ask « Exporte mes données » to get the file of « Mes données » from the assistant: its answer gives a download link, which works only for you, for 30 minutes.
+5. « Poursuivre » asks another question in the same conversation; the list of « Assistant » gives your conversations, which you can delete one by one, with « Supprimer » in the column « Actions », or all at once.
+
+- To share a subscription, open « Gérer » on its row and start typing the login of another account in « Identifiant du compte »: from two letters, the logins that match appear below the field; pick one, then click « Partager ». That account uses your key without seeing it; its conversations stay its own. « Retirer le partage avec … » ends it.
+- A subscription shared with you appears in « Souscriptions partagées avec moi »; « Ne plus proposer » hides it from the assistant.
+- Your questions and the data the assistant reads are sent to the provider of the subscription.
+
 ### Start your tracking again
 
 1. Export your data first if you want to keep them.
 2. In « Mes données », section « Supprimer mes données », retype your login in « Retapez votre identifiant pour confirmer ».
 3. Click the red button « Supprimer mes données ».
 
-Your days, adjustments, months (validated ones included) and settings are erased: the tracking starts again on the first day of the current month, like a new account. Your login, name and password are kept. This cannot be undone.
+Your days, adjustments, months (validated ones included), settings and conversations with the assistant are erased: the tracking starts again on the first day of the current month, like a new account. Your login, name, password and AI subscriptions are kept. This cannot be undone.
 
 ## FOR THE ADMINISTRATOR
 
@@ -327,5 +341,8 @@ The full rules are in [Administration](SPECIFICATIONS.md#administration).
 | « Quantité signée » | « Activité » | The amount of an adjustment: positive to credit, negative to debit. |
 | « Motif » | « Activité » | The mandatory reason of an adjustment or of a reopening. |
 | « Mot de passe provisoire » | « Comptes » | A password set by an administrator, to change at the first login. |
+| « Souscription » | « Mes souscriptions », « Assistant » | An API key of an AI provider with a model, yours or shared with you. |
+| « Action à confirmer » | conversation of « Assistant » | A change proposed by the assistant, written only if you click « Confirmer ». |
+| « Fournisseurs d'IA » | « Configuration » | The providers offered to the subscriptions, read-only. |
 
 Every other term is defined in the [Glossary](SPECIFICATIONS.md#glossary).

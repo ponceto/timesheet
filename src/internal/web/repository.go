@@ -22,6 +22,7 @@ import (
 
     "timesheet/internal/account"
     "timesheet/internal/activity"
+    "timesheet/internal/assistant"
 )
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,10 @@ type Repository interface {
     EraseCalendar(login account.Login, revision int64, start activity.Date) error
     CheckCalendar(login account.Login, revision int64, calendar activity.Calendar) error
     SaveConfiguration(revision int64, config activity.Configuration) error
+    AssistantState(login account.Login) (assistant.State, bool)
+    SharedSubscriptions(login account.Login) []assistant.SharedSubscription
+    SaveAssistantState(login account.Login, revision int64, state assistant.State, keys map[string]string) error
+    SubscriptionKey(login account.Login, ref assistant.SubscriptionRef) (assistant.Subscription, string, error)
 }
 
 // ---------------------------------------------------------------------------

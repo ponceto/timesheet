@@ -34,4 +34,7 @@
                     <li><a href="/dashboard/activity"{{if eq .Section "activity"}} aria-current="page"{{end}}>Activité</a></li>
                     <li><a href="/dashboard/month"{{if eq .Section "month"}} aria-current="page"{{end}}>Mois</a></li>
                     <li><a href="/dashboard/year/{{.Chrome.Year}}"{{if eq .Section "year"}} aria-current="page"{{end}}>Année</a></li>
+{{- if .Chrome.Assistant}}
+                    <li><a href="/dashboard/assistant"{{if eq .Section "assistant"}} aria-current="page"{{end}}>Assistant</a></li>
+{{- end}}
 {{end}}

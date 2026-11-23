@@ -31,6 +31,7 @@ type PageModel struct {
     Alert    string
     Alerts   []string
     CSRF     string
+    Refresh  bool
     Data     any
 }
 

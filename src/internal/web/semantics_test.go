@@ -38,10 +38,9 @@ func TestRenderedPagesHaveASemanticSkeleton(t *testing.T) {
     admin := site.client().login("root")
     pages := map[*testClient][]string{
         guest: {"/", "/login", "/nope"},
-        user:  {"/dashboard/", "/dashboard/activity/2026/09", "/dashboard/month/2026/09", "/dashboard/month/2026/11", "/dashboard/year/2026", "/dashboard/settings", "/dashboard/data", "/dashboard/profile", "/logout", "/admin/"},
+        user:  {"/dashboard/", "/dashboard/activity/2026/09", "/dashboard/month/2026/09", "/dashboard/month/2026/11", "/dashboard/year/2026", "/dashboard/settings", "/dashboard/data", "/dashboard/profile", "/dashboard/subscriptions", "/dashboard/assistant", "/logout", "/admin/"},
         admin: {"/admin/", "/admin/accounts", "/admin/accounts/demo", "/admin/settings", "/admin/accounts/demo/month/2026/10", "/admin/accounts/demo/year/2026"},
     }
-    headings := regexp.MustCompile(`<h([1-6])[ >]`)
     for client, paths := range pages {
         for _, path := range paths {
             status, _, body := client.get(path)
@@ -49,30 +48,48 @@ func TestRenderedPagesHaveASemanticSkeleton(t *testing.T) {
                 t.Errorf("%s: %d", path, status)
                 continue
             }
-            for _, element := range []string{`<html lang="fr"`, "<header>", "<main>", "<footer>", "</main>"} {
-                if !strings.Contains(body, element) {
-                    t.Errorf("%s: missing %s", path, element)
-                }
-            }
-            if strings.Contains(body, "<div") {
-                t.Errorf("%s contains a div", path)
-            }
-            level := 0
-            count := 0
-            for _, match := range headings.FindAllStringSubmatch(body, -1) {
-                next, _ := strconv.Atoi(match[1])
-                if next == 1 {
-                    count++
-                }
-                if next > (level + 1) {
-                    t.Errorf("%s: heading h%d after h%d", path, next, level)
-                }
-                level = next
-            }
-            if count != 1 {
-                t.Errorf("%s: %d h1", path, count)
-            }
+            checkSkeleton(t, path, body)
         }
+    }
+}
+
+func TestConversationPagesKeepTheHeadingOrder(t *testing.T) {
+    site, _ := newAssistantSite(t, openAIText("# Soldes\n\n#### Détail\n\n| Compteur | Solde |\n| --- | --- |\n| CP | 12,5 |\n\n## Suite\n\n<script>alert(1)</script>"))
+    demo := site.client().login("demo")
+    demo.subscribe("mistral|mistral-small-latest", "mistral-key")
+    path := demo.ask("", "Mes soldes ?")
+    site.logs.waitFor("assistant answered")
+    body := demo.page(path)
+    checkSkeleton(t, path, body)
+    if strings.Contains(body, "<script>alert") || !strings.Contains(body, "&lt;script&gt;alert(1)&lt;/script&gt;") || !strings.Contains(body, "<h5>Détail</h5>") {
+        t.Fatalf("the answer must be escaped and its headings placed under the exchange:\n%s", body)
+    }
+}
+
+func checkSkeleton(t *testing.T, path string, body string) {
+    t.Helper()
+    for _, element := range []string{`<html lang="fr"`, "<header>", "<main>", "<footer>", "</main>"} {
+        if !strings.Contains(body, element) {
+            t.Errorf("%s: missing %s", path, element)
+        }
+    }
+    if strings.Contains(body, "<div") {
+        t.Errorf("%s contains a div", path)
+    }
+    level := 0
+    count := 0
+    for _, match := range regexp.MustCompile(`<h([1-6])[ >]`).FindAllStringSubmatch(body, -1) {
+        next, _ := strconv.Atoi(match[1])
+        if next == 1 {
+            count++
+        }
+        if next > (level + 1) {
+            t.Errorf("%s: heading h%d after h%d", path, next, level)
+        }
+        level = next
+    }
+    if count != 1 {
+        t.Errorf("%s: %d h1", path, count)
     }
 }
 

@@ -27,6 +27,7 @@ Other documents hold the rest:
 - [DATA INTEGRITY](#data-integrity)
 - [FILES](#files)
 - [TRANSPORT](#transport)
+- [AI ASSISTANT](#ai-assistant)
 - [LOGS](#logs)
 - [DATA PROTECTION](#data-protection)
 - [REPORTING A VULNERABILITY](#reporting-a-vulnerability)
@@ -40,6 +41,7 @@ Other documents hold the rest:
   - absences with their reasons;
   - comments, some of which reveal health or family events (the `ABS` code and its comment, for example).
 - Password hashes.
+- The API keys of the AI subscriptions, sealed by the key file, and the conversations with the assistant.
 - The full inventory, with who reads what and for how long, is in [Personal data](SPECIFICATIONS.md#personal-data).
 
 ### Expected deployment
@@ -53,7 +55,8 @@ Other documents hold the rest:
 | --- | --- | --- |
 | User | A person with an account, profile `USER` or `ADMIN`. | The web pages of their own account. |
 | Administrator | A person whose account has the profile `ADMIN`. | In addition, the administration pages. |
-| Operator | A person with a shell on the host. | The commands, the database file, the session file, the logs, the backups. |
+| Operator | A person with a shell on the host. | The commands, the database file, the key file, the session file, the logs, the backups. |
+| AI provider | The company of the model a subscription names. | The questions sent with the subscription, the context of the account and the data the tools read for them. |
 
 The profiles and their pages are defined in [Profiles and accounts](SPECIFICATIONS.md#profiles-and-accounts).
 
@@ -77,6 +80,10 @@ Each defence is one line here; the linked section gives the detail.
 | Database | Concurrent writers | One exclusive lock; optimistic revisions between browsers. | [Data integrity](#data-integrity) |
 | Logs | Leaking secrets | No password, typed login, session identifier, CSRF token, query string or body. | [Logs](#logs) |
 | Network traffic | Eavesdropping, cookie theft | TLS on a network, `Secure` cookies and HSTS with https origins. | [Transport](#transport) |
+| Temporary downloads | Read by another account or from a leaked link | The link works only for the session of its account, for 30 minutes by default; files 0600 in a directory 0700. | [AI assistant](#ai-assistant) |
+| API keys | Read from the database, a backup or a page | Sealed with AES-256-GCM by a key file kept apart, never shown again, never logged, never given to a shared user. | [AI assistant](#ai-assistant) |
+| Host | Server-side request forgery through the assistant | Calls only to the https addresses of the providers of the configuration, without redirection. | [AI assistant](#ai-assistant) |
+| Activity of a user | Changed by the model, or through a prompt injected in the data | The tools act on the account of the question only; a write is a proposal, applied only when the user confirms it, after the checks of the pages. | [AI assistant](#ai-assistant) |
 
 Glossary of the terms of this table:
 
@@ -112,7 +119,12 @@ Each row is a known limit that the application does not remove. The column "Boun
 | An administrator with a default password. | A container starts on a new database without `TIMESHEET_PASSWORD`, or with an empty one. | Its administrator, `admin` unless `TIMESHEET_USERNAME` names another login, has the documented password `Tms@Admin%26`, provisional: the first login must change it, but whoever logs in first takes the account. | Give `TIMESHEET_PASSWORD` at the first start, or log in and change the password before the port is reachable from the network. See [Container](OPERATIONS.md#container). |
 | A permanent password known to the operator. | `user add` or `user passwd` set the password. | The operator typed it. | Ask the user to change it from the profile page (« Mon profil »). |
 | The session file gives the CSRF tokens. | Someone reads the session file. | It does not give the means to use a session. | Protect it like the database. |
-| The database and the backups are not encrypted. | root, the service account or a holder of a backup reads the file. | Every comment and absence reason is readable in clear. | File modes, protected backups. See [Data protection](#data-protection). |
+| The database and the backups are not encrypted. | root, the service account or a holder of a backup reads the file. | Every comment and absence reason is readable in clear, and the conversations with the assistant too; only the API keys are sealed. | File modes, protected backups. See [Data protection](#data-protection). |
+| The operator can open the API keys. | Whoever reads both the database and the key file. | The key file only protects the keys of a database copied without it. | Back up the key file apart from the database, or not at all and give the keys again after a restore. |
+| The data read by the assistant leave the host. | A user asks a question. | The question, the context of the account and the data its tools read, comments of `ABS` days included, go to the provider of the subscription, under its own terms. The profile page says it. | Choose the provider; do not use the assistant for data that must stay on the host. |
+| A user can list the logins of the other accounts. | A user types two letters in the field that shares a subscription, or asks `/dashboard/subscriptions/logins` directly. | The suggestions give at most 10 logins of enabled accounts per request, logins only, no name nor profile; an unknown login is also refused with its own message, where the login form gives the same answer for every login. The login form still gives no hint, and the throttle still applies to passwords. | Accepted: the accounts of one installation are few and known to each other. |
+| A shared key spends the quota of its owner. | An account a subscription is shared with asks many questions. | One answer at a time per account, `assistant.max_rounds` rounds and `assistant.max_tokens` tokens per call; no quota per account. | Share only with trusted accounts; withdraw the share. |
+| A prompt injection in the data steers the model. | A comment or a reason holds instructions for the model. | The model may read them and propose a wrong write, or a misleading answer; it cannot write without the confirmation of the user, nor reach another account. | Read the summary of an action before confirming it. |
 | Login timing differs for some accounts. | A stored hash has a number of iterations other than `passwords.iterations`. | The decoy hash uses the configured number. | Change `passwords.iterations` rarely; a password change rewrites the hash with the configured number. |
 | The operator weakens a setting. | Whoever can write the server configuration lowers a duration, a delay or a limit. | Every setting is bounded by the program: at least 600 000 iterations, an initial login delay of at least 100 ms, sessions of at most 30 days, at most 16 384 sessions in all, HSTS of at least 24 h. The file is owned by root on a package; in the container image, it belongs to the service account, so that `config set` works through `docker exec`. | Protect the file like the binary; read `config show --config=<file>` after a change. |
 | A security fix of Go needs a rebuild. | A vulnerability is fixed in the Go standard library. | The binary is statically linked; the container image is built with the Go version named in its `Dockerfile`. | Rebuild and reinstall the binary or the package; raise the Go version of the `Dockerfile` when it leaves support, then rebuild the image. |
@@ -131,6 +143,8 @@ Glossary of the terms of this table:
 - No route that writes activity takes the account from the URL or the form.
 - The export, the import and the deletion of the data page « Données » (`/dashboard/data/export`, `/dashboard/data/import`, `/dashboard/data/reset`) work on the account of the session only; an `ADMIN` cannot download, import nor erase the data of another account.
 - The deletion of the data asks the login retyped and the CSRF token of the session; it cannot be undone, except by restoring a backup.
+- The subscriptions and the conversations are those of the account of the session; only the owner of a subscription changes, shares or deletes it, and another account gets 404.
+- A pending action of the assistant is applied on the account of the session, with its CSRF token, like the form of the page it replaces.
 
 ### Another account
 
@@ -145,6 +159,7 @@ An `ADMIN` reads the activity of other accounts through read-only routes. On ano
 | Reset its password (the user must then change it) | Yes |
 | Delete it with its data | Yes |
 | Change its activity, settings or adjustments | No |
+| See its subscriptions, its keys or its conversations | No |
 
 ### Own account through the administration
 
@@ -590,6 +605,38 @@ Both options give:
 - After renewing it, restart the server.
 - Sessions survive the restart.
 
+## AI ASSISTANT
+
+### Sharing
+
+- Only the owner of a subscription changes, shares or deletes it; the route of the suggestions answers a connected session only, with the logins of other enabled accounts that contain at least 2 typed characters, 10 at most.
+
+### API keys
+
+- A key is sealed with AES-256-GCM by a 32-byte key read from `<database>.key`, mode 0600, created at the first subscription; the sealing is bound to the owner and to the identifier of the subscription, so that a sealed key moved to another record cannot be opened.
+- The key is written once, from the form, and never sent back: no page, export or log shows it, and an account a subscription is shared with uses it without seeing it.
+- The server configuration still holds no secret.
+
+### Outbound calls
+
+- The only outbound calls of the server are those of the assistant, over https, to the `base_url` of a provider of the configuration; a user chooses a provider, never an address.
+- Redirections are not followed, the answer is read up to 4 MiB, and each call lasts `assistant.timeout` at most.
+- The proxy of the environment (`HTTPS_PROXY`, `NO_PROXY`) applies.
+- The content security policy of the pages is unchanged: the browser never calls a provider.
+
+### Temporary downloads
+
+- The tool `export_data` keeps the export of the account in `<database>.downloads/`, mode 0700, one file of mode 0600 per download, for `assistant.download_ttl` (30 minutes by default).
+- The link holds 128 random bits, but it is no public capability: it works only through a session of the account that asked for it, whose login is part of the name of the file; any other request gets 404, as for an unknown link.
+- An expired file is removed at its next read and by the job that runs every `assistant.download_sweep`; « Supprimer mes données » and the deletion of the account remove the files of the account at once.
+- These files hold the comments of the days, those of absences included, until they expire: they are not encrypted, like the database.
+
+### Tools and confirmation
+
+- The tools read and write the account of the question; the login never comes from the model.
+- A write is only proposed: the user sees its summary and confirms it with a form, and the server checks it again on the current data and on the revision of the proposal before writing, as the page would.
+- The answers are parsed on the server and escaped by the templates: raw HTML and links other than http and https are shown as text.
+
 ## LOGS
 
 ### Never logged
@@ -602,10 +649,11 @@ Both options give:
 - A request body.
 - The `User-Agent` beyond its first 200 bytes.
 - The content of the days: codes, comments, reasons.
+- An API key, a question to the assistant, its answer or the data its tools read.
 
 Limits of this guarantee:
 
-- `secrets_test.go` checks the log output after a failed and a successful login; the other paths are checked by review.
+- `secrets_test.go` checks the log output after a failed and a successful login and after a question to the assistant; the other paths are checked by review.
 - Some events write the text of an error (for example `account creation refused`); that text is checked by review only.
 
 ### What the logs tell
@@ -630,7 +678,7 @@ The fields, the events and their levels are in [Logs](SPECIFICATIONS.md#logs).
 
 - A backup is a copy of the single database file.
 - Protect it like the database: it contains the password hashes and every user's absences and comments.
-- The database and its backups are not encrypted.
+- The database and its backups are not encrypted, except the API keys, sealed by the key file `<database>.key`: a backup of the database without the key file does not reveal them, and a restore without it loses them.
 - Restoring a backup brings back the passwords, profiles, states and accounts of its date.
 - A password changed, or an account disabled or deleted, since that date must be changed, disabled or deleted again.
 

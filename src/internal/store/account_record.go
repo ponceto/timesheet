@@ -23,6 +23,7 @@ import (
 
     "timesheet/internal/account"
     "timesheet/internal/activity"
+    "timesheet/internal/assistant"
 )
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,7 @@ import (
 type AccountRecord struct {
     account.Account
     activity.Calendar
+    Assistant *assistant.State `json:"assistant"`
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +51,8 @@ func (r AccountRecord) MarshalJSON() ([]byte, error) {
         Created            time.Time             `json:"created"`
         LastLogin          activity.NullableTime `json:"last_login"`
         activity.Calendar
-    }{r.Login, activity.NullableText(r.Name), r.Profile, r.Password, r.MustChangePassword, r.State, r.Created, activity.NullableTime(r.LastLogin), r.Calendar})
+        Assistant          *assistant.State      `json:"assistant"`
+    }{r.Login, activity.NullableText(r.Name), r.Profile, r.Password, r.MustChangePassword, r.State, r.Created, activity.NullableTime(r.LastLogin), r.Calendar, r.Assistant})
 }
 
 // ---------------------------------------------------------------------------

@@ -56,9 +56,10 @@ func TestUserMenuOffersProfileSettingsAndLogout(t *testing.T) {
         if strings.Contains(menu, "Administration") || !strings.Contains(menu, `<p class="menu-heading">Administrateur</p>
                     <ul>
                         <li><a href="/dashboard/profile">Mon profil</a></li>
+                        <li><a href="/dashboard/subscriptions">Mes souscriptions</a></li>
                         <li><a href="/dashboard/settings">Mes réglages</a></li>
                         <li><a href="/dashboard/data">Mes données</a></li>`) || !strings.Contains(menu, `<button type="submit">Se déconnecter</button>`) {
-            t.Errorf("%s: the user menu must hold only the profile, « Mon profil », « Mes réglages », « Mes données » and the logout", path)
+            t.Errorf("%s: the user menu must hold only the profile, « Mon profil », « Mes souscriptions », « Mes réglages », « Mes données » and the logout", path)
         }
     }
     if status, _, body := user.post("/logout", url.Values{"csrf": {user.token(page)}}); (status != http.StatusOK) || !strings.Contains(body, "Vous êtes déconnecté") || strings.Contains(body[strings.Index(body, "<main>"):strings.Index(body, "</main>")], "<a ") || strings.Contains(body[strings.Index(body, "<main>"):strings.Index(body, "</main>")], "<button") {

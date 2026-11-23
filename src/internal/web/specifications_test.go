@@ -58,7 +58,7 @@ func TestNoticesMatchTheSpecifications(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    for _, code := range []string{"saved", "validated", "reopened", "adjusted", "unadjusted", "settings", "password", "name", "created", "disabled", "enabled", "sessions", "deleted", "profile", "reset", "configuration", "change-password", "imported", "erased"} {
+    for _, code := range []string{"saved", "validated", "reopened", "adjusted", "unadjusted", "settings", "password", "name", "created", "disabled", "enabled", "sessions", "deleted", "profile", "reset", "configuration", "change-password", "imported", "erased", "subscription", "subscription-deleted", "shared", "unshared", "subscription-hidden", "subscription-shown", "cancelled", "conversation-deleted", "conversations-deleted"} {
         if NewNotices().Message(code) == "" {
             t.Errorf("notice %s has no message", code)
         }

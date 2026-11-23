@@ -196,6 +196,64 @@
         "carry_over": false,
         "archived": false
       }
+    ],
+    "ai_providers": [
+      {
+        "name": "mistral",
+        "label": "Mistral",
+        "format": "openai",
+        "base_url": "https://api.mistral.ai/v1",
+        "default_model": "mistral-small-latest",
+        "models": [
+          "mistral-large-latest",
+          "mistral-medium-latest",
+          "mistral-small-latest",
+          "magistral-medium-latest",
+          "open-mistral-nemo",
+          "codestral-latest"
+        ]
+      },
+      {
+        "name": "anthropic",
+        "label": "Anthropic (Claude)",
+        "format": "anthropic",
+        "base_url": "https://api.anthropic.com/v1",
+        "default_model": "claude-sonnet-5-5",
+        "models": [
+          "claude-opus-5-5",
+          "claude-sonnet-5-5",
+          "claude-haiku-5-5",
+          "claude-sonnet-4-5",
+          "claude-haiku-4-5"
+        ]
+      },
+      {
+        "name": "openai",
+        "label": "OpenAI",
+        "format": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4o-mini",
+        "models": [
+          "gpt-4.1",
+          "gpt-4.1-mini",
+          "gpt-4o",
+          "gpt-4o-mini",
+          "o4-mini",
+          "o3"
+        ]
+      },
+      {
+        "name": "google",
+        "label": "Google Gemini",
+        "format": "gemini",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "default_model": "gemini-2.5-flash",
+        "models": [
+          "gemini-2.5-pro",
+          "gemini-2.5-flash",
+          "gemini-2.0-flash"
+        ]
+      }
     ]
   },
   "accounts": [
@@ -20156,7 +20214,8 @@
           "ref": null,
           "created": "2026-10-31T22:59:59Z"
         }
-      ]
+      ],
+      "assistant": null
     }
   ]
 }

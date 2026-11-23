@@ -1155,3 +1155,127 @@ body > footer .brand {
     flex-direction: column;
     gap: var(--space-2);
 }
+
+.subscriptions td, .subscriptions th[scope="row"] {
+    vertical-align: top;
+}
+
+.subscription-edit {
+    margin-bottom: 0;
+}
+
+.subscription-edit form {
+    margin-top: var(--space-3);
+}
+
+.exchanges {
+    display: grid;
+    gap: var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.exchange {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow);
+}
+
+.exchange h3 {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.question {
+    margin: 0;
+    padding: var(--space-3);
+    background: var(--accent-soft);
+    border-radius: var(--radius);
+}
+
+.question p {
+    margin: 0;
+}
+
+.answer {
+    overflow-x: auto;
+}
+
+.answer > :first-child {
+    margin-top: 0;
+}
+
+.answer > :last-child {
+    margin-bottom: 0;
+}
+
+.answer pre {
+    padding: var(--space-3);
+    overflow-x: auto;
+    background: var(--surface-sunken);
+    border-radius: var(--radius);
+}
+
+.answer blockquote {
+    margin-left: 0;
+    padding-left: var(--space-3);
+    border-left: 3px solid var(--border-strong);
+    color: var(--ink-soft);
+}
+
+.answer table caption {
+    color: var(--ink-soft);
+}
+
+.is-waiting {
+    color: var(--ink-soft);
+}
+
+.pending-action {
+    padding: var(--space-4);
+    background: var(--warning-soft);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-large);
+}
+
+.pending-action h2 {
+    margin-top: 0;
+}
+
+.question-form textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.login-suggestions {
+    display: grid;
+    gap: var(--space-1);
+    margin: 0;
+    padding: var(--space-1);
+    list-style: none;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.login-suggestions button {
+    width: 100%;
+    justify-content: flex-start;
+    background: var(--surface-raised);
+    border-color: var(--surface-raised);
+    color: var(--ink);
+}
+
+.login-suggestions button:hover, .login-suggestions button:focus-visible {
+    background: var(--accent-soft);
+    border-color: var(--accent-soft);
+    color: var(--ink);
+}

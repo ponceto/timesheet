@@ -32,6 +32,7 @@ import (
 
     "timesheet/internal/account"
     "timesheet/internal/activity"
+    "timesheet/internal/assistant"
 )
 
 // ---------------------------------------------------------------------------
@@ -41,9 +42,12 @@ import (
 type Database struct {
     mu     sync.RWMutex
     file   *SecureFile
+    keys   *KeyRing
     limits activity.LimitSettings
     record DatabaseRecord
 }
+
+type loginSet map[account.Login]bool
 
 const (
     maxQuantity    = 366
@@ -62,7 +66,7 @@ var (
 // ---------------------------------------------------------------------------
 
 func NewDatabase(path string, logger *slog.Logger, maxBytes int64, limits activity.LimitSettings) *Database {
-    return &Database{file: NewSecureFile(path, logger, maxBytes), limits: limits}
+    return &Database{file: NewSecureFile(path, logger, maxBytes), keys: NewKeyRing(path + activity.KeySuffix, logger), limits: limits}
 }
 
 func (d *Database) Path() string {
@@ -144,6 +148,10 @@ func (d *Database) Load() error {
     }
     for i, item := range record.Accounts {
         record.Accounts[i].Calendar = item.Calendar.Clone()
+        if item.Assistant != nil {
+            state := item.Assistant.Clone()
+            record.Accounts[i].Assistant = &state
+        }
     }
     if record.Accounts == nil {
         record.Accounts = []AccountRecord{}
@@ -158,6 +166,7 @@ func (d *Database) validate(record DatabaseRecord) error {
     if err := record.Configuration.Validate(); err != nil {
         return fmt.Errorf("%w: configuration: %v", ErrMalformedDatabase, err)
     }
+    logins := d.logins(record)
     seen := map[account.Login]bool{}
     for i, item := range record.Accounts {
         path := fmt.Sprintf("accounts[%d]", i)
@@ -171,8 +180,25 @@ func (d *Database) validate(record DatabaseRecord) error {
         if err := d.validateCalendar(record.Configuration, item.Calendar); err != nil {
             return fmt.Errorf("%w: %s.%v", ErrMalformedDatabase, path, err)
         }
+        if item.Assistant != nil {
+            if err := item.Assistant.Validate(record.Configuration, item.Login, logins.Has); err != nil {
+                return fmt.Errorf("%w: %s.assistant: %v", ErrMalformedDatabase, path, err)
+            }
+        }
     }
     return nil
+}
+
+func (d *Database) logins(record DatabaseRecord) loginSet {
+    logins := loginSet{}
+    for _, item := range record.Accounts {
+        logins[item.Login] = true
+    }
+    return logins
+}
+
+func (s loginSet) Has(login account.Login) bool {
+    return s[login]
 }
 
 func (d *Database) validateCalendar(config activity.Configuration, calendar activity.Calendar) error {
@@ -462,6 +488,12 @@ func (d *Database) DeleteAccount(login account.Login) error {
         return account.ErrLastAdmin
     }
     next.Accounts = slices.Delete(next.Accounts, index, index + 1)
+    for i, item := range next.Accounts {
+        if item.Assistant != nil {
+            state := item.Assistant.WithoutShare(login)
+            next.Accounts[i].Assistant = &state
+        }
+    }
     return d.commit(next)
 }
 
@@ -569,6 +601,11 @@ func (d *Database) EraseCalendar(login account.Login, revision int64, start acti
     if err := d.place(next, login, revision, activity.NewCalendar(start), false); err != nil {
         return err
     }
+    if index := d.find(next, login); next.Accounts[index].Assistant != nil {
+        state := next.Accounts[index].Assistant.Clone()
+        state.Conversations, state.Revision = []assistant.Conversation{}, state.Revision + 1
+        next.Accounts[index].Assistant = &state
+    }
     return d.commit(next)
 }
 
@@ -627,6 +664,11 @@ func (d *Database) SaveConfiguration(revision int64, config activity.Configurati
         if err := d.validateCalendar(config, next.Accounts[i].Calendar); err != nil {
             return fmt.Errorf("%w: %s.%v", activity.ErrConfigurationInUse, item.Login, err)
         }
+        if item.Assistant != nil {
+            if err := item.Assistant.Validate(config, item.Login, d.logins(next).Has); err != nil {
+                return fmt.Errorf("%w: %s.assistant: %v", activity.ErrConfigurationInUse, item.Login, err)
+            }
+        }
         for _, code := range config.Activities {
             previous, known := next.Configuration.Activity(code.ID)
             if known && ((previous.Consumes != code.Consumes) || (previous.Feeds != code.Feeds)) && item.Calendar.UsesActivity(code.ID) {
@@ -637,6 +679,125 @@ func (d *Database) SaveConfiguration(revision int64, config activity.Configurati
     config.Revision = revision + 1
     next.Configuration = config.Clone()
     return d.commit(next)
+}
+
+func (d *Database) KeyPath() string {
+    return d.keys.Path()
+}
+
+func (d *Database) AssistantState(login account.Login) (assistant.State, bool) {
+    d.mu.RLock()
+    defer d.mu.RUnlock()
+    index := d.find(d.record, login)
+    if index < 0 {
+        return assistant.State{}, false
+    }
+    if state := d.record.Accounts[index].Assistant; state != nil {
+        return state.Clone(), true
+    }
+    return assistant.State{}, true
+}
+
+func (d *Database) SharedSubscriptions(login account.Login) []assistant.SharedSubscription {
+    d.mu.RLock()
+    defer d.mu.RUnlock()
+    index := d.find(d.record, login)
+    if index < 0 {
+        return nil
+    }
+    own := assistant.State{}
+    if d.record.Accounts[index].Assistant != nil {
+        own = *d.record.Accounts[index].Assistant
+    }
+    shared := []assistant.SharedSubscription{}
+    for _, item := range d.record.Accounts {
+        if (item.Login == login) || (item.Assistant == nil) || !item.State.Enabled() {
+            continue
+        }
+        for _, subscription := range item.Assistant.Subscriptions {
+            if subscription.SharedTo(login) {
+                subscription = subscription.Clone()
+                subscription.Key, subscription.SharedWith = "", nil
+                entry := assistant.SharedSubscription{Owner: item.Login, OwnerName: item.Name, Subscription: subscription}
+                entry.Hidden = own.IsHidden(entry.Ref())
+                shared = append(shared, entry)
+            }
+        }
+    }
+    return shared
+}
+
+func (d *Database) SaveAssistantState(login account.Login, revision int64, state assistant.State, keys map[string]string) error {
+    d.mu.Lock()
+    defer d.mu.Unlock()
+    next := d.begin()
+    index := d.find(next, login)
+    if index < 0 {
+        return account.ErrUnknownAccount
+    }
+    current := assistant.State{}
+    if next.Accounts[index].Assistant != nil {
+        current = *next.Accounts[index].Assistant
+    }
+    if current.Revision != revision {
+        return activity.ErrStaleRevision
+    }
+    state = state.Clone()
+    for id, plain := range keys {
+        position, found := state.Subscription(id)
+        if !found || (plain == "") || (len(plain) > assistant.MaxKeyLength) || !activity.NewTextPolicy().Accepts(plain, assistant.MaxKeyLength) {
+            return assistant.ErrInvalidKey
+        }
+        sealed, err := d.keys.Seal(plain, d.secretContext(login, id))
+        if err != nil {
+            return err
+        }
+        state.Subscriptions[position].Key = sealed
+    }
+    if err := state.Validate(next.Configuration, login, d.logins(next).Has); err != nil {
+        return err
+    }
+    state.Revision = revision + 1
+    next.Accounts[index].Assistant = &state
+    for (d.size(next.Accounts[index]) > int(d.limits.AccountBytes)) && (len(state.Conversations) > 1) {
+        state.Conversations = d.withoutOldest(state.Conversations)
+        next.Accounts[index].Assistant = &state
+    }
+    return d.commit(next)
+}
+
+func (d *Database) withoutOldest(conversations []assistant.Conversation) []assistant.Conversation {
+    oldest := 0
+    for i, conversation := range conversations {
+        if conversation.Updated.Before(conversations[oldest].Updated) {
+            oldest = i
+        }
+    }
+    return slices.Delete(slices.Clone(conversations), oldest, oldest + 1)
+}
+
+func (d *Database) SubscriptionKey(login account.Login, ref assistant.SubscriptionRef) (assistant.Subscription, string, error) {
+    d.mu.RLock()
+    index := d.find(d.record, ref.Owner)
+    if (index < 0) || (d.record.Accounts[index].Assistant == nil) || !d.record.Accounts[index].State.Enabled() {
+        d.mu.RUnlock()
+        return assistant.Subscription{}, "", assistant.ErrUnusable
+    }
+    state := d.record.Accounts[index].Assistant
+    position, found := state.Subscription(ref.ID)
+    if !found || ((ref.Owner != login) && !state.Subscriptions[position].SharedTo(login)) {
+        d.mu.RUnlock()
+        return assistant.Subscription{}, "", assistant.ErrUnusable
+    }
+    subscription := state.Subscriptions[position].Clone()
+    d.mu.RUnlock()
+    plain, err := d.keys.Open(subscription.Key, d.secretContext(ref.Owner, ref.ID))
+    subscription.Key = ""
+    return subscription, plain, err
+}
+
+func (d *Database) secretContext(owner account.Login, id string) string {
+    return "timesheet/subscription/" + string(owner) + "/" + id
 }
 
 // ---------------------------------------------------------------------------

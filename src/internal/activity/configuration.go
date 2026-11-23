@@ -34,6 +34,7 @@ type Configuration struct {
     PublicHolidays PublicHolidayZone `json:"public_holidays"`
     Activities     []ActivityCode    `json:"activities"`
     Counters       []CounterRule     `json:"counters"`
+    AIProviders    []AIProvider      `json:"ai_providers"`
 }
 
 const (
@@ -75,7 +76,33 @@ func NewDefaultConfiguration() Configuration {
             {ID: "TPC", Label: "Temps partiels complémentaires", ShortLabel: "TPC", Accrual: Accrual{Every: EveryMonth, Amount: NewQuantity(0, 1)}, PeriodStart: NewPeriodStart(time.January, 1)},
             {ID: "ABS", Label: "Absences", ShortLabel: "ABS", EnabledByDefault: true, Accrual: Accrual{Every: EveryYear, Amount: NewQuantity(0, 1)}, PeriodStart: NewPeriodStart(time.January, 1)},
         },
+        AIProviders: NewDefaultAIProviders(),
     }
+}
+
+func NewDefaultAIProviders() []AIProvider {
+    return []AIProvider{
+        {Name: "mistral", Label: "Mistral", Format: FormatOpenAI, BaseURL: "https://api.mistral.ai/v1", DefaultModel: "mistral-small-latest", Models: []string{"mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "magistral-medium-latest", "open-mistral-nemo", "codestral-latest"}},
+        {Name: "anthropic", Label: "Anthropic (Claude)", Format: FormatAnthropic, BaseURL: "https://api.anthropic.com/v1", DefaultModel: "claude-sonnet-5-5", Models: []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-sonnet-4-5", "claude-haiku-4-5"}},
+        {Name: "openai", Label: "OpenAI", Format: FormatOpenAI, BaseURL: "https://api.openai.com/v1", DefaultModel: "gpt-4o-mini", Models: []string{"gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini", "o4-mini", "o3"}},
+        {Name: "google", Label: "Google Gemini", Format: FormatGemini, BaseURL: "https://generativelanguage.googleapis.com/v1beta", DefaultModel: "gemini-2.5-flash", Models: []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"}},
+    }
+}
+
+func (c Configuration) Providers() []AIProvider {
+    if len(c.AIProviders) == 0 {
+        return NewDefaultAIProviders()
+    }
+    return c.AIProviders
+}
+
+func (c Configuration) Provider(name string) (AIProvider, bool) {
+    for _, provider := range c.Providers() {
+        if provider.Name == name {
+            return provider, true
+        }
+    }
+    return AIProvider{}, false
 }
 
 func (c Configuration) Activity(id string) (ActivityCode, bool) {
@@ -143,6 +170,37 @@ func (c Configuration) Validate() error {
             return c.fail(path + ".id", "duplicate identifier %q", code.ID)
         }
         seen[code.ID] = true
+    }
+    return c.validateProviders()
+}
+
+func (c Configuration) validateProviders() error {
+    if len(c.AIProviders) > MaxAIProviders {
+        return c.fail("ai_providers", "at most %d providers expected", MaxAIProviders)
+    }
+    names := map[string]bool{}
+    for i, provider := range c.AIProviders {
+        path := fmt.Sprintf("ai_providers[%d]", i)
+        switch {
+            case !provider.ValidName() || names[provider.Name]:
+                return c.fail(path + ".name", "a unique name [a-z0-9-]{1,16} expected")
+            case !c.validLabel(provider.Label, maxLabelLength):
+                return c.fail(path + ".label", "1 to %d characters expected", maxLabelLength)
+            case !provider.Format.Valid():
+                return c.fail(path + ".format", "openai, anthropic or gemini expected")
+            case !provider.ValidURL():
+                return c.fail(path + ".base_url", "an https URL without query, fragment nor final slash expected")
+            case !provider.ValidModel(provider.DefaultModel):
+                return c.fail(path + ".default_model", "a model name of 1 to %d printable characters expected", MaxAIModelLength)
+            case len(provider.Models) > MaxAIModels:
+                return c.fail(path + ".models", "at most %d models expected", MaxAIModels)
+        }
+        for _, model := range provider.Models {
+            if !provider.ValidModel(model) {
+                return c.fail(path + ".models", "model names of 1 to %d printable characters expected", MaxAIModelLength)
+            }
+        }
+        names[provider.Name] = true
     }
     return nil
 }
@@ -212,6 +270,12 @@ func (c Configuration) Clone() Configuration {
     clone := c
     clone.Activities = slices.Clone(c.Activities)
     clone.Counters = slices.Clone(c.Counters)
+    if c.AIProviders != nil {
+        clone.AIProviders = make([]AIProvider, 0, len(c.AIProviders))
+        for _, provider := range c.AIProviders {
+            clone.AIProviders = append(clone.AIProviders, provider.Clone())
+        }
+    }
     return clone
 }
 

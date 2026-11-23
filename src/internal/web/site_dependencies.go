@@ -20,6 +20,7 @@ package web
 import (
     "io"
     "log/slog"
+    "net/http"
     "net/netip"
 
     "timesheet/internal/activity"
@@ -41,6 +42,8 @@ type SiteDependencies struct {
     LocalPrefixes  []netip.Prefix
     Iterations     int
     Version        string
+    Client         *http.Client
+    Downloads      Downloads
 }
 
 // ---------------------------------------------------------------------------

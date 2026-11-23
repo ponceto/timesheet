@@ -47,6 +47,7 @@ type configurationRecord struct {
     Effects        []OptionRecord
     Counter        []OptionRecord
     Every          []OptionRecord
+    Providers      []activity.AIProvider
 }
 
 type activityCodeRecord struct {
@@ -91,7 +92,7 @@ func (c *AdminSettingsController) Show(w http.ResponseWriter, r *http.Request) {
 
 func (c *AdminSettingsController) render(w http.ResponseWriter, r *http.Request, status int, alert string) {
     config := c.repository.Configuration()
-    record := configurationRecord{Revision: config.Revision}
+    record := configurationRecord{Revision: config.Revision, Providers: config.Providers()}
     for _, zone := range activity.PublicHolidayZones() {
         record.PublicHolidays = append(record.PublicHolidays, OptionRecord{Value: string(zone), Label: zone.Label(), Selected: zone == config.PublicHolidayZone()})
     }

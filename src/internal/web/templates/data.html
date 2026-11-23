@@ -43,7 +43,7 @@
                 <form method="post" action="{{.ResetPath}}">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
                     <input type="hidden" name="revision" value="{{.Revision}}">
-                    <p><small>Efface vos jours saisis, vos ajustements, l'historique de vos mois, mois validés compris, et vos réglages : le suivi recommence au premier jour du mois, comme pour un compte neuf. Votre identité, votre nom et votre mot de passe sont conservés. Exportez d'abord vos données pour les garder.</small></p>
+                    <p><small>Efface vos jours saisis, vos ajustements, l'historique de vos mois, mois validés compris, vos réglages et vos conversations avec l'assistant : le suivi recommence au premier jour du mois, comme pour un compte neuf. Votre identité, votre nom, votre mot de passe et vos souscriptions IA sont conservés. Exportez d'abord vos données pour les garder.</small></p>
                     <label class="field"><span class="field-name">Retapez votre identifiant pour confirmer</span><input type="text" name="confirm" autocapitalize="none" spellcheck="false" maxlength="32" required></label>
                     <p class="actions"><button type="submit" class="danger">Supprimer mes données</button></p>
                 </form>

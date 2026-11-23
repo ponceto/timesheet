@@ -46,6 +46,10 @@ func (l Login) Valid() bool {
     return regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,31}$`).MatchString(string(l))
 }
 
+func (l Login) Equal(other Login) bool {
+    return l == other
+}
+
 func (l Login) String() string {
     return string(l)
 }

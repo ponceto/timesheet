@@ -35,6 +35,7 @@ type Viewer struct {
     MustChange bool
     SessionKey string
     CSRF       string
+    Assistant  bool
 }
 
 type viewerKey struct{}

@@ -36,6 +36,14 @@ func (t NullableTime) MarshalJSON() ([]byte, error) {
     return time.Time(t).MarshalJSON()
 }
 
+func (t *NullableTime) UnmarshalJSON(data []byte) error {
+    return (*time.Time)(t).UnmarshalJSON(data)
+}
+
+func (t NullableTime) Time() time.Time {
+    return time.Time(t)
+}
+
 // ---------------------------------------------------------------------------
 // End-Of-File
 // ---------------------------------------------------------------------------

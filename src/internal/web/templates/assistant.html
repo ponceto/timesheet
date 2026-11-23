@@ -1,0 +1,83 @@
+{{- /*
+ * assistant.html - Copyright (c) 2023-2026 - Olivier Poncet
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */ -}}
+{{define "title"}}Assistant{{end}}
+{{define "content"}}{{with .Data}}            <header class="page-header">
+                <h1>Assistant</h1>
+                <p>Posez une question sur vos saisies, vos compteurs ou votre synthèse annuelle. L'assistant lit vos données et peut vous proposer des saisies, que vous confirmez ou annulez.</p>
+            </header>
+{{- if .Choices}}
+            <section>
+                <h2>Nouvelle conversation</h2>
+{{template "question-form" $}}
+            </section>
+{{- end}}
+            <section>
+                <h2>Conversations</h2>
+{{- if .Conversations}}
+                <table class="conversations">
+                    <caption>{{len .Conversations}} conversation(s), la plus récente d'abord</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Conversation</th>
+                            <th scope="col">Dernier échange</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+{{- range .Conversations}}
+                        <tr>
+                            <th scope="row"><a href="{{.Path}}">{{.Title}}</a>{{if .Waiting}} <small>réponse en cours</small>{{end}}</th>
+                            <td><time datetime="{{.UpdatedDate}}">{{.Updated}}</time></td>
+                            <td>
+                                <form method="post" action="/dashboard/assistant">
+                                    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="conversation" value="{{.ID}}">
+                                    <button type="submit" class="danger" aria-label="Supprimer la conversation « {{.Title}} »">Supprimer</button>
+                                </form>
+                            </td>
+                        </tr>
+{{- end}}
+                    </tbody>
+                </table>
+                <form method="post" action="/dashboard/assistant">
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="action" value="delete-all">
+                    <p class="actions"><button type="submit" class="danger">Supprimer toutes les conversations</button></p>
+                </form>
+{{- else}}
+                <p>Aucune conversation.</p>
+{{- end}}
+            </section>
+{{end}}{{end}}
+{{define "question-form"}}                <form method="post" action="/dashboard/assistant" class="question-form">
+                    <input type="hidden" name="csrf" value="{{.CSRF}}">
+                    <input type="hidden" name="action" value="ask">
+                    <fieldset>
+                        <legend>Votre question</legend>
+                        <label class="field"><span class="field-name">Question</span><textarea name="question" rows="4" maxlength="{{.Data.MaxQuestion}}" required>{{.Data.Question}}</textarea></label>
+{{- if gt (len .Data.Choices) 1}}
+                        <label class="field"><span class="field-name">Souscription</span><select name="subscription">{{range .Data.Choices}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select></label>
+{{- end}}
+                        <p><small>Entrée envoie la question, Maj+Entrée passe à la ligne.</small></p>
+                        <p class="actions"><button type="submit">Envoyer</button></p>
+                    </fieldset>
+                </form>
+{{end}}
+{{define "scripts"}}
+        <script type="module" src="/static/js/assistant_page.js"></script>
+{{- end}}

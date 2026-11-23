@@ -43,6 +43,7 @@ type DashboardController struct {
     dashboards *DashboardView
     months     *MonthView
     years      *YearView
+    editor     *MonthEditor
 }
 
 const (
@@ -55,7 +56,7 @@ const (
 // ---------------------------------------------------------------------------
 
 func NewDashboardController(loader *WorkspaceLoader, repository Repository, renderer *Renderer, errors *ErrorPages, clock activity.Clock, random io.Reader, logger *slog.Logger) *DashboardController {
-    return &DashboardController{loader: loader, repository: repository, renderer: renderer, errors: errors, clock: clock, random: random, logger: logger, dashboards: NewDashboardView(), months: NewMonthView(), years: NewYearView()}
+    return &DashboardController{loader: loader, repository: repository, renderer: renderer, errors: errors, clock: clock, random: random, logger: logger, dashboards: NewDashboardView(), months: NewMonthView(), years: NewYearView(), editor: NewMonthEditor(random)}
 }
 
 func (c *DashboardController) Show(w http.ResponseWriter, r *http.Request) {
@@ -141,15 +142,14 @@ func (c *DashboardController) Save(w http.ResponseWriter, r *http.Request) {
     if !ok {
         return
     }
-    if ws.Calendar.IsValidated(m) || m.Before(ws.Calendar.Settings.Start.Month()) || m.After(ws.Horizon()) {
-        c.render(w, r, ws, PageActivity, http.StatusConflict, m, nil, nil, "Ce mois n'est pas modifiable : il est validé, précède le début du suivi ou dépasse l'horizon de planification de 24 mois.")
+    if !c.editor.Editable(ws, m) {
+        c.render(w, r, ws, PageActivity, http.StatusConflict, m, nil, nil, lockedMonth)
         return
     }
     if !c.upToDate(w, r, ws, m) {
         return
     }
     submitted := map[activity.Date]activity.DayEntry{}
-    problems := map[activity.Date][]string{}
     calendar := ws.Calendar.Clone()
     for d := m.First(); !d.After(m.Last()); d = d.AddDays(1) {
         if !calendar.Tracks(d) {
@@ -165,18 +165,9 @@ func (c *DashboardController) Save(w http.ResponseWriter, r *http.Request) {
             entry.AM, entry.PM = whole, whole
         }
         submitted[d] = entry
-        if found := ws.Book.CheckEntry(d, calendar.Days[d], entry); len(found) > 0 {
-            problems[d] = found
-            continue
-        }
-        if entry.Empty() {
-            delete(calendar.Days, d)
-        } else {
-            calendar.Days[d] = entry
-        }
     }
-    if len(problems) > 0 {
-        c.render(w, r, ws, PageActivity, http.StatusUnprocessableEntity, m, submitted, problems, "Certaines saisies sont invalides, rien n'a été enregistré.")
+    if problems := c.editor.Apply(ws, &calendar, submitted); len(problems) > 0 {
+        c.render(w, r, ws, PageActivity, http.StatusUnprocessableEntity, m, submitted, problems, invalidEntries)
         return
     }
     if !c.save(w, r, ws, PageActivity, calendar, m) {
@@ -287,9 +278,9 @@ func (c *DashboardController) Adjust(w http.ResponseWriter, r *http.Request) {
     notice := "adjusted"
     switch r.PostFormValue("action") {
         case "add":
-            m, alert = c.addAdjustment(ws, &calendar, r)
+            m, alert = c.editor.AddAdjustment(ws, &calendar, r.PostFormValue("date"), r.PostFormValue("counter"), r.PostFormValue("amount"), r.PostFormValue("reason"))
         case "delete":
-            m, alert = c.deleteAdjustment(ws, &calendar, r.PostFormValue("id"))
+            m, alert = c.editor.DeleteAdjustment(&calendar, r.PostFormValue("id"))
             notice = "unadjusted"
         default:
             c.errors.BadRequest(w, r)
@@ -310,50 +301,6 @@ func (c *DashboardController) Adjust(w http.ResponseWriter, r *http.Request) {
     }
     c.logger.Info("adjustments changed", "login", string(ws.Owner.Login), "month", m.String(), "change", notice)
     c.renderer.Redirect(w, r, ws.PagePath(PageActivity, m), notice)
-}
-
-func (c *DashboardController) addAdjustment(ws *Workspace, calendar *activity.Calendar, r *http.Request) (activity.Month, string) {
-    d, err := activity.NewDateFromText(r.PostFormValue("date"))
-    if err != nil {
-        return activity.Month{}, "Date d'ajustement invalide."
-    }
-    m := d.Month()
-    if !calendar.Tracks(d) || calendar.IsValidated(m) || m.After(ws.Horizon()) {
-        return m, "Un ajustement se saisit dans un mois ouvert, à partir du début du suivi."
-    }
-    rule, known := ws.Config.Counter(r.PostFormValue("counter"))
-    if !known || rule.Archived {
-        return m, "Compteur inconnu."
-    }
-    amount, err := activity.NewQuantityFromText(strings.Replace(r.PostFormValue("amount"), ",", ".", 1))
-    if (err != nil) || amount.IsZero() || (amount.Abs().Cmp(activity.NewQuantity(MaxDays, 1)) > 0) {
-        return m, "Quantité invalide : un nombre signé non nul entre -366 et 366, par exemple -1,5 ou 7/12."
-    }
-    reason := strings.TrimSpace(r.PostFormValue("reason"))
-    if (reason == "") || !activity.NewTextPolicy().Accepts(reason, activity.MaxReasonLength) {
-        return m, "Le motif est obligatoire (une ligne, 200 caractères au plus)."
-    }
-    id, err := activity.NewIdentifierGenerator(c.random).Next()
-    if err != nil {
-        return m, "Erreur interne."
-    }
-    calendar.Adjustments = append(calendar.Adjustments, activity.Adjustment{ID: id, Date: d, Counter: rule.ID, Amount: amount, Reason: reason})
-    return m, ""
-}
-
-func (c *DashboardController) deleteAdjustment(ws *Workspace, calendar *activity.Calendar, id string) (activity.Month, string) {
-    for i, adjustment := range calendar.Adjustments {
-        if adjustment.ID != id {
-            continue
-        }
-        m := adjustment.Date.Month()
-        if calendar.IsValidated(m) {
-            return m, "Cet ajustement appartient à un mois validé."
-        }
-        calendar.Adjustments = append(calendar.Adjustments[:i:i], calendar.Adjustments[i + 1:]...)
-        return m, ""
-    }
-    return activity.Month{}, "Ajustement inconnu."
 }
 
 func (c *DashboardController) Year(w http.ResponseWriter, r *http.Request) {

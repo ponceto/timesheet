@@ -73,7 +73,19 @@ func (g *AuthGuard) Viewer(r *http.Request) *Viewer {
         g.sessions.Close(key)
         return nil
     }
-    return &Viewer{Login: login, Name: found.Name, Profile: found.Profile, MustChange: found.MustChangePassword, SessionKey: key, CSRF: csrf}
+    return &Viewer{Login: login, Name: found.Name, Profile: found.Profile, MustChange: found.MustChangePassword, SessionKey: key, CSRF: csrf, Assistant: g.assistant(login)}
+}
+
+func (g *AuthGuard) assistant(login account.Login) bool {
+    if state, found := g.repository.AssistantState(login); found && (len(state.Subscriptions) > 0) {
+        return true
+    }
+    for _, shared := range g.repository.SharedSubscriptions(login) {
+        if !shared.Hidden {
+            return true
+        }
+    }
+    return false
 }
 
 func (g *AuthGuard) Optional(r *http.Request) *http.Request {

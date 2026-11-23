@@ -125,6 +125,7 @@ func (r *Renderer) Render(w http.ResponseWriter, req *http.Request, status int, 
         model.Chrome.Initials = r.initials(model.Chrome.Name)
         model.Chrome.ProfileLabel = viewer.Profile.Label()
         model.Chrome.CSRF = viewer.CSRF
+        model.Chrome.Assistant = viewer.Assistant
         if model.CSRF == "" {
             model.CSRF = viewer.CSRF
         }

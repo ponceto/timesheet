@@ -75,6 +75,12 @@ func TestConfigurationValidationNamesTheField(t *testing.T) {
         "counters[2].id":         func(c *Configuration) { c.Counters[2].ID = "TOO_LONG_IDENTIFIER" },
         "activities[4].label":    func(c *Configuration) { c.Activities[4].Label = "bad\u202elabel" },
         "public_holidays":        func(c *Configuration) { c.PublicHolidays = "corse" },
+        "ai_providers[1].name":   func(c *Configuration) { c.AIProviders[1].Name = "mistral" },
+        "ai_providers[0].format": func(c *Configuration) { c.AIProviders[0].Format = "other" },
+        "ai_providers[2].base_url": func(c *Configuration) { c.AIProviders[2].BaseURL = "http://127.0.0.1:8080" },
+        "ai_providers[3].base_url": func(c *Configuration) { c.AIProviders[3].BaseURL = "https://user@api.test/v1" },
+        "ai_providers[0].default_model": func(c *Configuration) { c.AIProviders[0].DefaultModel = "bad model" },
+        "ai_providers[1].models": func(c *Configuration) { c.AIProviders[1].Models = append(c.AIProviders[1].Models, "") },
     }
     for path, mutate := range cases {
         config := NewDefaultConfiguration().Clone()
@@ -83,6 +89,23 @@ func TestConfigurationValidationNamesTheField(t *testing.T) {
         if !errors.Is(err, ErrInvalidConfiguration) || !strings.Contains(err.Error(), path + ":") {
             t.Errorf("%s: got %v", path, err)
         }
+    }
+}
+
+func TestConfigurationWithoutProvidersSuggestsTheDefaultOnes(t *testing.T) {
+    config := NewDefaultConfiguration()
+    config.AIProviders = nil
+    if err := config.Validate(); err != nil {
+        t.Fatal(err)
+    }
+    if provider, found := config.Provider("anthropic"); !found || (provider.Format != FormatAnthropic) || (len(config.Providers()) != 4) {
+        t.Fatalf("got %+v %v", provider, found)
+    }
+    original := NewDefaultConfiguration()
+    clone := original.Clone()
+    clone.AIProviders[0].Models[0] = "changed"
+    if original.AIProviders[0].Models[0] == "changed" {
+        t.Fatal("the clone shares the models")
     }
 }
 
